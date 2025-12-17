@@ -1,113 +1,109 @@
-import sqlite3
 import os
-import json
 import datetime
+from sqlalchemy import create_engine, text, MetaData, Table, Column, String, Integer
+from sqlalchemy.pool import NullPool
 
-DB_NAME = "billete.db"
+# Detect environment: Render uses DATABASE_URL
+# Handle "postgres://" fix for SQLAlchemy 1.4+
+db_url = os.getenv("DATABASE_URL", "sqlite:///billete.db")
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
+engine = create_engine(db_url)
+metadata = MetaData()
+
+# Define tables using SQLAlchemy Core for cross-db compatibility
+airports_table = Table('airports', metadata,
+    Column('code', String, primary_key=True),
+    Column('name', String, nullable=False)
+)
+
+history_table = Table('history', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('timestamp', String),
+    Column('code', String),
+    Column('result', String),
+    Column('passenger_info', String),
+    Column('route_info', String)
+)
 
 def init_db():
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    # Airports table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS airports (
-            code TEXT PRIMARY KEY,
-            name TEXT NOT NULL
-        )
-    ''')
-    
-    # History table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            code TEXT,
-            result TEXT,
-            passenger_info TEXT,
-            route_info TEXT
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+    metadata.create_all(engine)
 
 def get_all_airports():
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM airports')
-    rows = c.fetchall()
-    conn.close()
-    return {row['code']: row['name'] for row in rows}
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT code, name FROM airports"))
+        return {row.code: row.name for row in result}
 
 def upsert_airport(code, name):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO airports (code, name) VALUES (?, ?)
+    # Compatible UPSERT syntax for SQLite and PostgreSQL
+    # Both support ON CONFLICT(code) DO UPDATE SET name=excluded.name
+    # Note: SQLAlchemy 1.4+ Core doesn't abstract UPSERT fully cross-db in a simple way 
+    # without using dialect-specific imports (sqlite.insert, postgresql.insert).
+    # However, standard SQL "ON CONFLICT" works for both SQLite (since 3.24) and Postgres.
+    
+    # We use raw SQL for simplicity here to ensure the syntax matches both.
+    sql = text('''
+        INSERT INTO airports (code, name) VALUES (:code, :name)
         ON CONFLICT(code) DO UPDATE SET name=excluded.name
-    ''', (code.upper(), name))
-    conn.commit()
-    conn.close()
+    ''')
+    with engine.connect() as conn:
+        conn.execute(sql, {"code": code.upper(), "name": name})
+        conn.commit()
 
 def delete_airport(code):
     try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute('DELETE FROM airports WHERE code = ?', (code.upper(),))
-        row_count = c.rowcount
-        conn.commit()
-        conn.close()
-        return row_count > 0
+        with engine.connect() as conn:
+            result = conn.execute(text("DELETE FROM airports WHERE code = :code"), {"code": code.upper()})
+            conn.commit()
+            return result.rowcount > 0
     except Exception as e:
         print(f"Delete Error: {e}")
         return False
 
 def get_history_entries(limit=100):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM history ORDER BY id DESC LIMIT ?', (limit,))
-    rows = c.fetchall()
-    conn.close()
-    
-    history = []
-    for row in rows:
-        history.append({
-            "timestamp": row['timestamp'],
-            "code": row['code'],
-            "result": row['result'],
-            "passenger_info": row['passenger_info'],
-            "route_info": row['route_info']
-        })
-    return history
+    with engine.connect() as conn:
+        # Use text() for query, but result columns are accessible by name
+        result = conn.execute(
+            text("SELECT * FROM history ORDER BY id DESC LIMIT :limit"),
+            {"limit": limit}
+        )
+        history = []
+        for row in result:
+            # SQLAlchemy rows behave like named tuples
+            history.append({
+                "timestamp": row.timestamp,
+                "code": row.code,
+                "result": row.result,
+                "passenger_info": row.passenger_info,
+                "route_info": row.route_info
+            })
+        return history
 
-def add_history_entry(code, result, passenger_info, route_info):
-    conn = get_db_connection()
-    c = conn.cursor()
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    c.execute('''
-        INSERT INTO history (timestamp, code, result, passenger_info, route_info)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (timestamp, code, result, passenger_info, route_info))
-    
-    # Cleanup old > 7 days
-    # Optional logic: DELETE FROM history WHERE timestamp < ... 
-    # But for now, let's keep it simple or implement the logic from logic.py here.
-    
-    conn.commit()
-    conn.close()
+def add_history_entry(code, result, passenger_info, route_info, timestamp=None):
+    if not timestamp:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+    with engine.connect() as conn:
+        conn.execute(
+            text('''
+                INSERT INTO history (timestamp, code, result, passenger_info, route_info)
+                VALUES (:timestamp, :code, :result, :passenger_info, :route_info)
+            '''),
+            {
+                "timestamp": timestamp,
+                "code": code,
+                "result": result,
+                "passenger_info": passenger_info,
+                "route_info": route_info
+            }
+        )
+        conn.commit()
 
 def clear_history_entries():
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('DELETE FROM history')
-    conn.commit()
-    conn.close()
+    with engine.connect() as conn:
+        conn.execute(text("DELETE FROM history"))
+        conn.commit()
     return True
 
 # Initialize on import

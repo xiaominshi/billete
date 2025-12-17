@@ -41,21 +41,14 @@ def migrate():
                 # We should insert Oldest -> Newest.
                 
                 for item in reversed(data):
-                    # We manually insert with timestamp from file
-                    conn = database.get_db_connection()
-                    c = conn.cursor()
-                    c.execute('''
-                        INSERT INTO history (timestamp, code, result, passenger_info, route_info)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (
-                        item.get('timestamp', ''),
+                    # Use database module's function with explicit timestamp
+                    database.add_history_entry(
                         item.get('code', ''),
                         item.get('result', ''),
                         item.get('passenger_info', ''),
-                        item.get('route_info', '')
-                    ))
-                    conn.commit()
-                    conn.close()
+                        item.get('route_info', ''),
+                        timestamp=item.get('timestamp', '')
+                    )
                     count += 1
             print(f"Migrated {count} history entries.")
         except Exception as e:

@@ -11,3 +11,5 @@ requests>=2.0.0
 beautifulsoup4>=4.0.0
 airportsdata>=2022.0.0
 python-dotenv>=0.19.0
+SQLAlchemy>=1.4.0
+psycopg2-binary>=2.9.0
