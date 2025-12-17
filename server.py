@@ -3,6 +3,10 @@ from logic import Logic
 from pyngrok import ngrok
 import sys
 import os
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 logic = Logic()
@@ -114,7 +118,11 @@ if __name__ == '__main__':
     
     if use_ngrok:
         # Set your authtoken if you haven't already (optional but recommended)
-        ngrok.set_auth_token("36wYtOWEJDNl3vmUYOyXguf1IKF_2tFv2wBFAjZwsLiLTjTZG")
+        token = os.getenv("NGROK_AUTH_TOKEN")
+        if token:
+            ngrok.set_auth_token(token)
+        else:
+            print("Warning: NGROK_AUTH_TOKEN not found in .env")
         
         # Open a HTTP tunnel on the default port 5000
         public_url = ngrok.connect(5000).public_url

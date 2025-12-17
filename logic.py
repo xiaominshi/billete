@@ -6,50 +6,37 @@ import time
 import requests
 import airportsdata
 from bs4 import BeautifulSoup
+import database
 
 class Logic:
     def __init__(self):
-        self.airport_map = self.load_airport_map()
         self.passengers = []
         self.flights = []
         self.layovers = []
         try:
-             # Load IATA database. It is a dict keyed by IATA code.
              self.airports_db = airportsdata.load('IATA')
         except Exception as e:
             print(f"Failed to load airportsdata: {e}")
             self.airports_db = {}
+        
+        # Initialize map from DB
+        try:
+             self.airport_map = database.get_all_airports()
+        except:
+             self.airport_map = {}
 
     def load_airport_map(self):
-        mapping = {}
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            file_path = os.path.join(base_dir, "fly.txt")
-            with open(file_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    parts = line.strip().split(":")
-                    if len(parts) == 2:
-                        mapping[parts[0]] = parts[1]
-        except Exception as e:
-            print(f"Error loading fly.txt: {e}")
-        return mapping
+        return database.get_all_airports()
     
     def reload_airport_map(self):
-        self.airport_map = self.load_airport_map()
+        self.airport_map = database.get_all_airports()
 
     def save_airport_map(self):
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            file_path = os.path.join(base_dir, "fly.txt")
-            with open(file_path, "w", encoding="utf-8") as f:
-                for code, name in self.airport_map.items():
-                    f.write(f"{code}:{name}\n")
-        except Exception as e:
-            print(f"Error saving fly.txt: {e}")
+        pass
 
     def update_airport(self, code, name):
+        database.upsert_airport(code, name)
         self.airport_map[code] = name
-        self.save_airport_map()
 
     def fetch_online_airport_name(self, code):
         """
@@ -147,70 +134,14 @@ class Logic:
         return code
 
     def get_history(self):
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            file_path = os.path.join(base_dir, "history.json")
-            if not os.path.exists(file_path):
-                return []
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Error loading history: {e}")
-            return []
+        return database.get_history_entries(limit=50)
 
     def clear_history(self):
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            file_path = os.path.join(base_dir, "history.json")
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump([], f)
-            return True
-        except Exception as e:
-            print(f"Error clearing history: {e}")
-            return False
+        return database.clear_history_entries()
 
     def save_to_history(self, code, result, passenger_info="", route_info=""):
         try:
-            history = self.get_history()
-            
-            # Create new entry
-            entry = {
-                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "code": code,
-                "result": result,
-                "passenger_info": passenger_info,
-                "route_info": route_info
-            }
-            
-            history.insert(0, entry)
-            
-            # Filter entries older than 7 days
-            cutoff = datetime.datetime.now() - datetime.timedelta(days=7)
-            valid_history = []
-            
-            for h in history:
-                try:
-                    ts_str = h.get("timestamp")
-                    if ts_str:
-                        ts = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-                        if ts > cutoff:
-                            valid_history.append(h)
-                except:
-                   # If parse fails, keep it or discard? Let's keep recent ones safely
-                   # Actually safer to just keep if we can't parse or assume old?
-                   # Let's assume valid format.
-                   pass
-            
-            # Additional safety: Limit to 100 even if within week
-            if len(valid_history) > 100:
-                valid_history = valid_history[:100]
-                
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            file_path = os.path.join(base_dir, "history.json")
-            
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(valid_history, f, ensure_ascii=False, indent=2)
-                
+            database.add_history_entry(code, result, passenger_info, route_info)
         except Exception as e:
             print(f"Error saving history: {e}")
 
