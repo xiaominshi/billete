@@ -374,14 +374,20 @@
             <div style="position:absolute; left:-9999px; top:0;">
                 <div id="visualCard">
                     <!-- Header -->
-                    <div class="vc-header">
+                    <div class="vc-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div>
                             <div style="font-size: 24px; font-weight: 700;">✈ 行程确认单</div>
                             <div style="font-size: 14px; opacity: 0.9;">Flight Itinerary</div>
                         </div>
-                        <div style="text-align: right;">
-                            <div style="font-weight: 600; font-size: 18px;">LuLu</div>
-                            <div style="font-size: 13px; opacity: 0.8;" id="vc-date"></div>
+                        <div style="display: flex; gap: 15px; align-items: center;">
+                            <div style="text-align: right;">
+                                <div style="font-weight: 600; font-size: 18px;">LuLu</div>
+                                <div style="font-size: 13px; opacity: 0.8;" id="vc-date"></div>
+                            </div>
+                            <div style="text-align: center;">
+                                <img src="/static/qrcode.jpg" style="width: 60px; height: 60px; object-fit: contain; border-radius: 4px;" alt="QR" />
+                                <div style="font-size: 8px; color: white; opacity: 0.9; margin-top: 2px;">Weixin</div>
+                            </div>
                         </div>
                     </div>
 
