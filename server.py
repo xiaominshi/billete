@@ -31,10 +31,17 @@ def process():
         luggage_info = f"\n经济舱往返 欧\n托运行李{pack_count} 件,每件{pack_weight}公斤\n手提行李{hand_count}件{hand_weight} 公斤\n"
         final_result = result_text + luggage_info
         
-        return jsonify({'result': final_result})
+        # Save to history
+        logic.save_to_history(code, final_result)
         
+        return jsonify({'result': final_result})
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/history', methods=['GET'])
+def get_history():
+    return jsonify(logic.get_history())
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

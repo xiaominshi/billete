@@ -136,7 +136,86 @@
         let allAirports = {};
 
         // Load airports on start
-        window.addEventListener('load', loadAirports);
+        window.addEventListener('load', () => {
+            loadAirports();
+            loadHistory();
+        });
+
+        async function loadHistory() {
+            const listDiv = document.getElementById('history_list');
+            try {
+                const response = await fetch('/history');
+                const history = await response.json();
+
+                listDiv.innerHTML = '';
+                if (history.length === 0) {
+                    listDiv.innerHTML = '<div style="color:#888;">No history yet.</div>';
+                    return;
+                }
+
+                history.forEach((item, index) => {
+                    const div = document.createElement('div');
+                    div.style.borderBottom = '1px solid #eee';
+                    div.style.padding = '10px 0';
+
+                    // Summary line
+                    const summary = document.createElement('div');
+                    summary.style.display = 'flex';
+                    summary.style.justifyContent = 'space-between';
+                    summary.style.cursor = 'pointer';
+                    summary.style.fontWeight = 'bold';
+                    summary.onclick = () => toggleHistoryDetails(index);
+
+                    summary.innerHTML = `
+                        <span>${item.timestamp}</span>
+                        <span style="color: #2196F3;">View Details ▼</span>
+                    `;
+
+                    // Details block (hidden by default)
+                    const details = document.createElement('div');
+                    details.id = `hist-detail-${index}`;
+                    details.style.display = 'none';
+                    details.style.marginTop = '10px';
+                    details.style.backgroundColor = '#f9f9f9';
+                    details.style.padding = '10px';
+
+                    details.innerHTML = `
+                        <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Input Code:</div>
+                        <pre style="white-space: pre-wrap; background: #eee; padding: 5px; max-height: 100px; overflow-y: auto;">${item.code}</pre>
+                        <div style="font-size: 12px; color: #666; margin: 10px 0 5px;">Result:</div>
+                        <pre style="white-space: pre-wrap; background: #e8f5e9; padding: 5px;">${item.result}</pre>
+                        <button onclick="restoreHistory(${index})" style="margin-top:5px; padding: 5px 10px; cursor:pointer;">Use This Code</button>
+                    `;
+
+                    // Store data in element for restore
+                    details.dataset.code = item.code;
+
+                    div.appendChild(summary);
+                    div.appendChild(details);
+                    listDiv.appendChild(div);
+                });
+
+            } catch (e) {
+                console.error("Failed to load history", e);
+                listDiv.innerHTML = '<div style="color:red;">Failed to load history.</div>';
+            }
+        }
+
+        function toggleHistoryDetails(index) {
+            const el = document.getElementById(`hist-detail-${index}`);
+            if (el.style.display === 'none') {
+                el.style.display = 'block';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        function restoreHistory(index) {
+            const el = document.getElementById(`hist-detail-${index}`);
+            const code = el.dataset.code;
+            document.getElementById('code').value = code;
+            document.getElementById('code').scrollIntoView({ behavior: 'smooth' });
+        }
 
         async function loadAirports() {
             try {

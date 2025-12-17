@@ -1,6 +1,8 @@
 import re
 import os
 import datetime
+import json
+import time
 
 class Logic:
     def __init__(self):
@@ -39,6 +41,45 @@ class Logic:
     def update_airport(self, code, name):
         self.airport_map[code] = name
         self.save_airport_map()
+
+    def get_history(self):
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(base_dir, "history.json")
+            if not os.path.exists(file_path):
+                return []
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading history: {e}")
+            return []
+
+    def save_to_history(self, code, result):
+        try:
+            history = self.get_history()
+            
+            # Create new entry
+            entry = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "code": code,
+                "result": result
+            }
+            
+            # Prepend (newest first)
+            history.insert(0, entry)
+            
+            # Limit to 50
+            if len(history) > 50:
+                history = history[:50]
+                
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(base_dir, "history.json")
+            
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(history, f, ensure_ascii=False, indent=2)
+                
+        except Exception as e:
+            print(f"Error saving history: {e}")
 
     def merge_lines_without_sequence_number(self, text):
         lines = text.split("\n")
