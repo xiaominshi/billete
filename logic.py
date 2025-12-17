@@ -267,6 +267,8 @@ class Logic:
                     
                     start_time_fmt = f"{start_time[:2]}:{start_time[2:]}"
                     end_time_fmt = f"{end_time[:2]}:{end_time[2:]}"
+                    if next_day:
+                        end_time_fmt += "+1"
                     
                     day = date_str[:2]
                     month_str = date_str[2:]
