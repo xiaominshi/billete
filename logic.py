@@ -26,6 +26,20 @@ class Logic:
     def reload_airport_map(self):
         self.airport_map = self.load_airport_map()
 
+    def save_airport_map(self):
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(base_dir, "fly.txt")
+            with open(file_path, "w", encoding="utf-8") as f:
+                for code, name in self.airport_map.items():
+                    f.write(f"{code}:{name}\n")
+        except Exception as e:
+            print(f"Error saving fly.txt: {e}")
+
+    def update_airport(self, code, name):
+        self.airport_map[code] = name
+        self.save_airport_map()
+
     def merge_lines_without_sequence_number(self, text):
         lines = text.split("\n")
         output = []

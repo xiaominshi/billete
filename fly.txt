@@ -68,3 +68,5 @@ LTN:伦敦卢顿
 STN:伦敦斯坦sted
 AGP:Malaga
 PMI:Palma Mallorca
+
+SXM:你爸爸
