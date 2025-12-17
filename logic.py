@@ -3,6 +3,9 @@ import os
 import datetime
 import json
 import time
+import requests
+import airportsdata
+from bs4 import BeautifulSoup
 
 class Logic:
     def __init__(self):
@@ -10,6 +13,12 @@ class Logic:
         self.passengers = []
         self.flights = []
         self.layovers = []
+        try:
+             # Load IATA database. It is a dict keyed by IATA code.
+             self.airports_db = airportsdata.load('IATA')
+        except Exception as e:
+            print(f"Failed to load airportsdata: {e}")
+            self.airports_db = {}
 
     def load_airport_map(self):
         mapping = {}
@@ -41,6 +50,77 @@ class Logic:
     def update_airport(self, code, name):
         self.airport_map[code] = name
         self.save_airport_map()
+
+    def fetch_online_airport_name(self, code):
+        """
+        Fallback to online search. Try to get a readable name for the airport.
+        Using gcmap.com as it is simple and static.
+        """
+        try:
+            url = f"http://www.gcmap.com/airport/{code}"
+            # Timeout is important to avoid hanging
+            resp = requests.get(url, timeout=3)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                # The meta description often has the name
+                meta = soup.find('meta', attrs={'name': 'description'})
+                if meta and meta.get('content'):
+                    desc = meta.get('content')
+                    # Format usually: "Airport Name - City, Country - Code"
+                    # We want "City (Airport Name)" or just "City"
+                    # Let's try to extract City.
+                    # Example: "Adolfo Suárez Madrid-Barajas Airport - Madrid, Spain - MAD - Airport"
+                    
+                    parts = desc.split(" - ")
+                    if len(parts) >= 3:
+                        city_part = parts[1] # "Madrid, Spain"
+                        city_name = city_part.split(",")[0]
+                        return city_name
+                    
+                    # Fallback to title?
+                    return desc.split(" - ")[0] # Airport Name
+        except Exception as e:
+            print(f"Online lookup failed for {code}: {e}")
+        return None
+
+    def resolve_airport(self, code):
+        """
+        Resolve airport code to name using 3 levels:
+        1. Local fly.txt
+        2. Offline airportsdata DB
+        3. Online Scraping
+        """
+        code = code.upper()
+        
+        # 1. Local
+        if code in self.airport_map:
+            return self.airport_map[code]
+        
+        # 2. Offline DB
+        if code in self.airports_db:
+             data = self.airports_db[code]
+             # Prefer City name, or "City - Name"
+             # data['city'], data['name']
+             city = data.get('city', '')
+             name = data.get('name', '')
+             
+             # If city is missing, use name.
+             final_name = city if city else name
+             
+             # Save to map
+             print(f"Found offline: {code} -> {final_name}")
+             self.update_airport(code, final_name)
+             return final_name
+             
+        # 3. Online Fallback
+        online_name = self.fetch_online_airport_name(code)
+        if online_name:
+             print(f"Found online: {code} -> {online_name}")
+             self.update_airport(code, online_name)
+             return online_name
+             
+        # Not found
+        return code
 
     def get_history(self):
         try:
@@ -289,9 +369,9 @@ class Logic:
                 ori = ori_des[:3]
                 des = ori_des[3:]
                 
-                # Map airports
-                ori_name = self.airport_map.get(ori, ori)
-                des_name = self.airport_map.get(des, des)
+                # Map airports (Auto-Resolve)
+                ori_name = self.resolve_airport(ori)
+                des_name = self.resolve_airport(des)
                 
                 # Times
                 # HK1 1 1310 0600+1
