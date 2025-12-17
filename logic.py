@@ -22,6 +22,9 @@ class Logic:
         except Exception as e:
             print(f"Error loading fly.txt: {e}")
         return mapping
+    
+    def reload_airport_map(self):
+        self.airport_map = self.load_airport_map()
 
     def merge_lines_without_sequence_number(self, text):
         lines = text.split("\n")

@@ -36,6 +36,36 @@ def process():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/update_mapping', methods=['POST'])
+def update_mapping():
+    try:
+        data = request.json
+        code = data.get('code', '').upper()
+        name = data.get('name', '')
+        
+        if not code or not name:
+             return jsonify({'error': 'Missing code or name'}), 400
+             
+        # Append to fly.txt
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(base_dir, "fly.txt")
+        
+        # Check if already exists (simple check)
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            if f"{code}:{name}" in content:
+                return jsonify({'message': 'Already exists'})
+        
+        with open(file_path, "a", encoding="utf-8") as f:
+            f.write(f"\n{code}:{name}")
+            
+        # Reload logic
+        logic.reload_airport_map()
+        
+        return jsonify({'message': f'Success: {code} -> {name}'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # Optional: Open ngrok tunnel if command line argument provided
     use_ngrok = len(sys.argv) > 1 and sys.argv[1] == '--public'
