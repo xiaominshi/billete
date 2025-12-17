@@ -1,15 +1,23 @@
 from flask import Flask, render_template, request, jsonify
-from logic import Logic
+import importlib.util
 from pyngrok import ngrok
 import sys
 import os
-import os
+import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
+# Force-load local logic.py to avoid importing an unrelated module named 'logic'
+_logic_path = os.path.join(os.path.dirname(__file__), "logic.py")
+_spec = importlib.util.spec_from_file_location("billete_logic", _logic_path)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+Logic = _mod.Logic
 logic = Logic()
+print(f" * Logic loaded from: {_logic_path}")
+print(f" * Logic module name: {_mod.__name__}")
 
 @app.route('/')
 def home():
@@ -23,7 +31,8 @@ def process():
         if not code:
             return jsonify({'error': 'No code provided'}), 400
             
-        # Use logic to process
+        # Use logic to process (source text)
+        # logic.process() returns the formatted text string
         result_text = logic.process(code)
         
         # Append Luggage
@@ -35,42 +44,20 @@ def process():
         luggage_info = f"\n经济舱往返 欧\n托运行李{pack_count} 件,每件{pack_weight}公斤\n手提行李{hand_count}件{hand_weight} 公斤\n"
         final_result = result_text + luggage_info
         
-        # Extract Metadata for history
-        pax_names = [p['name'] for p in logic.passengers]
-        pax_str = ", ".join(pax_names)
-        
+        # Construct route string for history
         route_str = ""
         if logic.flights:
-            # Simple Route: First Origin -> Last Destination
-            # Or list all stops? "MAD->PEK, PEK->MAD"
-            # Let's do: Origin -> Dest
-            # If multiple flights, maybe connect them?
-            # User wants "Start End".
-            
-            # Let's try to make a compact route string: MAD-PEK
-            # taking first origin and last dest might be misleading if it's round trip MAD-PEK-MAD.
-            # So maybe "MAD-PEK-MAD" if return?
-            
-            stops = [logic.flights[0]['origin']]
-            for f in logic.flights:
-                stops.append(f['dest'])
-            
-            # Remove consecutive duplicates (if any, though origin of next should be dest of prev)
-            # Actually standard route string: MAD-PEK / PEK-MAD
-            
             if len(logic.flights) == 1:
                 route_str = f"{logic.flights[0]['origin']}-{logic.flights[0]['dest']}"
             else:
-                 # Check if round trip?
-                 stops_short = [logic.flights[0]['origin'], logic.flights[-1]['dest']]
-                 route_str = "-".join(stops_short)
-                 # Add intermediate? No, keep it short. "MAD-MAD" implies round trip.
-                 
-                 # Better: Construct full path "MAD-PEK-MAD"
-                 full_path = [logic.flights[0]['origin']]
-                 for f in logic.flights:
-                     full_path.append(f['dest'])
-                 route_str = "-".join(full_path)
+                full_path = [logic.flights[0]['origin']]
+                for f in logic.flights:
+                    full_path.append(f['dest'])
+                route_str = "-".join(full_path)
+
+        # Extract passengers string for history
+        pax_names = [p['name'] for p in logic.passengers]
+        pax_str = ", ".join(pax_names)
 
         # Save to history
         logic.save_to_history(code, final_result, pax_str, route_str)
@@ -91,6 +78,7 @@ def process():
         })
 
     except Exception as e:
+        print(f"Error in process: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/history', methods=['GET'])
@@ -131,22 +119,38 @@ def manage_airports():
         else:
              return jsonify({'error': 'Failed to delete'}), 500
 
+@app.route('/version', methods=['GET'])
+def version():
+    # Simple health/version info
+    return jsonify({
+        "module": _mod.__name__,
+        "path": _logic_path,
+        "has_year_field": any('year' in f for f in logic.flights) if logic.flights else False
+    })
 
 if __name__ == '__main__':
     # Optional: Open ngrok tunnel if command line argument provided
     use_ngrok = len(sys.argv) > 1 and sys.argv[1] == '--public'
     
     if use_ngrok:
-        # Set your authtoken if you haven't already (optional but recommended)
-        token = os.getenv("NGROK_AUTH_TOKEN")
-        if token:
-            ngrok.set_auth_token(token)
-        else:
-            print("Warning: NGROK_AUTH_TOKEN not found in .env")
-        
-        # Open a HTTP tunnel on the default port 5000
-        public_url = ngrok.connect(5000).public_url
-        print(f" * Public URL: {public_url}")
-        print(" * Share this URL with others to access the service.")
+        try:
+            # Set your authtoken if you haven't already (optional but recommended)
+            token = os.getenv("NGROK_AUTH_TOKEN")
+            if token:
+                ngrok.set_auth_token(token)
+            else:
+                print("Warning: NGROK_AUTH_TOKEN not found in .env")
+            # Ensure previous tunnels are closed
+            try:
+                ngrok.kill()
+            except Exception:
+                pass
+            # Open a HTTP tunnel on the default port 5000
+            public_url = ngrok.connect(5000).public_url
+            print(f" * Public URL: {public_url}")
+            print(" * Share this URL with others to access the service.")
+        except Exception as e:
+            print(f" * Ngrok failed to start: {e}")
+            print(" * Fallback to local/LAN service. Access via http://127.0.0.1:5000 or your LAN IP.")
     
     app.run(host='0.0.0.0', port=5000)

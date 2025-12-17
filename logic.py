@@ -13,6 +13,9 @@ class Logic:
         self.passengers = []
         self.flights = []
         self.layovers = []
+        self.base_year = datetime.datetime.now().year
+        self.current_year = self.base_year
+        self.last_month = None
         try:
              self.airports_db = airportsdata.load('IATA')
         except Exception as e:
@@ -389,11 +392,19 @@ class Logic:
                         tz_dest = pytz.timezone(tz_dest_str)
                         
                         # 2. Construct Datetime objects
-                        # Use current year? Or try to guess based on input date vs now?
-                        # Simplifying: Use current year.
-                        current_year = datetime.datetime.now().year
+                        # Use derived year that accounts for month wrap (e.g., DEC -> JAN).
                         month_int = int(month)
                         day_int = int(day)
+                        # Determine correct year based on month progression
+                        if self.last_month is None:
+                            self.last_month = month_int
+                            year_to_use = self.current_year
+                        else:
+                            if month_int < self.last_month:
+                                # Month wrapped to next calendar year
+                                self.current_year += 1
+                            self.last_month = month_int
+                            year_to_use = self.current_year
                         
                         start_h = int(start_time[:2])
                         start_m = int(start_time[2:])
@@ -401,8 +412,8 @@ class Logic:
                         end_m = int(end_time[2:])
                         
                         # Local times
-                        dt_start_local = datetime.datetime(current_year, month_int, day_int, start_h, start_m)
-                        dt_end_local = datetime.datetime(current_year, month_int, day_int, end_h, end_m)
+                        dt_start_local = datetime.datetime(year_to_use, month_int, day_int, start_h, start_m)
+                        dt_end_local = datetime.datetime(year_to_use, month_int, day_int, end_h, end_m)
                         
                         if next_day:
                             dt_end_local += datetime.timedelta(days=1)
@@ -451,6 +462,7 @@ class Logic:
                         "end": end_time_fmt,
                         "month": month,
                         "day": day,
+                        "year": year_to_use,
                         "next_day": next_day,
                         "raw_start": start_time,
                         "raw_end": end_time,
@@ -471,29 +483,27 @@ class Logic:
             curr = self.flights[i]
             
             # Simple layover calculation
-            # Assume same year
             try:
                 # Convert to datetime objects for diff
-                # We need a reference year, let's use current year
-                year = datetime.datetime.now().year
-                
                 # Prev arrival
+                prev_year = int(prev.get("year", self.base_year))
                 prev_month = int(prev["month"])
                 prev_day = int(prev["day"])
                 prev_hour = int(prev["raw_end"][:2])
                 prev_min = int(prev["raw_end"][2:])
                 
-                dt_prev = datetime.datetime(year, prev_month, prev_day, prev_hour, prev_min)
+                dt_prev = datetime.datetime(prev_year, prev_month, prev_day, prev_hour, prev_min)
                 if prev["next_day"]:
                     dt_prev += datetime.timedelta(days=1)
                 
                 # Curr departure
+                curr_year = int(curr.get("year", prev_year))
                 curr_month = int(curr["month"])
                 curr_day = int(curr["day"])
                 curr_hour = int(curr["raw_start"][:2])
                 curr_min = int(curr["raw_start"][2:])
                 
-                dt_curr = datetime.datetime(year, curr_month, curr_day, curr_hour, curr_min)
+                dt_curr = datetime.datetime(curr_year, curr_month, curr_day, curr_hour, curr_min)
                 
                 # If curr is before prev (e.g. year wrap), add year? 
                 # Or if the gap is huge (return flight), we don't calculate layover usually?
@@ -504,7 +514,8 @@ class Logic:
                 hours = total_minutes // 60
                 minutes = total_minutes % 60
                 
-                if hours >= 24:
+                # Use 3 days threshold to mark return
+                if hours >= 72:
                     # Return trip or stopover > 24h
                     # Add separator logic in text generation
                     curr["is_return"] = True
@@ -516,8 +527,8 @@ class Logic:
                 else:
                     self.layovers.append({
                         "type": "layover",
-                        "place": prev["origin"] if 'origin' in prev else "", # Fallback
-                        "stop_place": prev["dest"], # Correct place is destination of previous
+                        "place": prev["dest"],
+                        "version": "new",
                         "hours": hours,
                         "minutes": minutes,
                         "flight_index": i # Associate with current flight (it happens BEFORE current flight)
@@ -530,6 +541,8 @@ class Logic:
         self.passengers = []
         self.flights = []
         self.layovers = []
+        self.current_year = self.base_year
+        self.last_month = None
         
         cleaned_code = self.merge_lines_without_sequence_number(raw_code)
         
@@ -596,7 +609,7 @@ class Logic:
             
             # Let's find if there is a layover associated with this flight (meaning before this flight)
             layover = next((l for l in self.layovers if l["flight_index"] == i), None)
-            if layover and layover.get('type', 'layover') == 'layover':
+            if layover and layover.get('type', 'layover') == 'layover' and layover['hours'] >= 0:
                  res += f"{layover.get('place', '')}停留时间: {layover['hours']}小时{layover['minutes']}分\n"
             
             # Flight info
