@@ -53,42 +53,71 @@ class Logic:
 
     def fetch_online_airport_name(self, code):
         """
-        Fallback to online search. Try to get a readable name for the airport.
-        Using gcmap.com as it is simple and static.
+        Fallback to online search using a Chinese source.
+        Target: airport.supfree.net
         """
         try:
-            url = f"http://www.gcmap.com/airport/{code}"
-            # Timeout is important to avoid hanging
-            resp = requests.get(url, timeout=3)
+            url = f"http://airport.supfree.net/search.asp?s={code}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+            # Timeout is important
+            resp = requests.get(url, headers=headers, timeout=5)
+            # This site uses legacy encoding
+            resp.encoding = 'gbk'
+            
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
-                # The meta description often has the name
-                meta = soup.find('meta', attrs={'name': 'description'})
-                if meta and meta.get('content'):
-                    desc = meta.get('content')
-                    # Format usually: "Airport Name - City, Country - Code"
-                    # We want "City (Airport Name)" or just "City"
-                    # Let's try to extract City.
-                    # Example: "Adolfo Suárez Madrid-Barajas Airport - Madrid, Spain - MAD - Airport"
-                    
-                    parts = desc.split(" - ")
-                    if len(parts) >= 3:
-                        city_part = parts[1] # "Madrid, Spain"
-                        city_name = city_part.split(",")[0]
-                        return city_name
-                    
-                    # Fallback to title?
-                    return desc.split(" - ")[0] # Airport Name
+                # The result is usually in a table
+                # Look for the first row that contains the code
+                
+                # Table structure is complex, but the data often looks like:
+                # <td>CODE</td> ... <td>City Name</td> ... <td>Country</td>
+                
+                # Simplified strategy: Find the string in the body that matches predictable text
+                # Or find the table cell with the code, and look at siblings.
+                
+                # supfree structure:
+                # <th>IATA代码</th> ... <th>城市</th>
+                
+                # Find all rows
+                rows = soup.find_all('tr')
+                for row in rows:
+                    cols = row.find_all('td')
+                    if len(cols) >= 4:
+                        # col 0 might be IATA, col 1 might be City, etc.
+                        # It varies, but usually:
+                        # Code | City | Airport Name | Country
+                        # Let's clean text
+                        txts = [c.get_text().strip() for c in cols]
+                        if code in txts:
+                            # Found the row!
+                            # Let's guess indices. 
+                            # Usually index 1 is City (Chinese)
+                            # index 3 might be Country
+                            
+                            # Let's try to grab whatever looks like Chinese
+                            possible_name = txts[1] 
+                            # Check if it's the code itself
+                            if possible_name == code:
+                                possible_name = txts[2]
+                                
+                            # If we found something good
+                            if possible_name and possible_name != code:
+                                return possible_name
+                                
         except Exception as e:
-            print(f"Online lookup failed for {code}: {e}")
+            print(f"Chinese lookup failed for {code}: {e}")
+        
+        # If Chinese fails, try English fallback DB or return Code
         return None
 
     def resolve_airport(self, code):
         """
         Resolve airport code to name using 3 levels:
-        1. Local fly.txt
-        2. Offline airportsdata DB
-        3. Online Scraping
+        1. Local fly.txt (Priority)
+        2. Online Scraping (Priority for Chinese)
+        3. Offline airportsdata DB (Fallback, English)
         """
         code = code.upper()
         
@@ -96,28 +125,23 @@ class Logic:
         if code in self.airport_map:
             return self.airport_map[code]
         
-        # 2. Offline DB
-        if code in self.airports_db:
-             data = self.airports_db[code]
-             # Prefer City name, or "City - Name"
-             # data['city'], data['name']
-             city = data.get('city', '')
-             name = data.get('name', '')
-             
-             # If city is missing, use name.
-             final_name = city if city else name
-             
-             # Save to map
-             print(f"Found offline: {code} -> {final_name}")
-             self.update_airport(code, final_name)
-             return final_name
-             
-        # 3. Online Fallback
+        # 2. Online Chinese Fallback (Preferred for Language)
         online_name = self.fetch_online_airport_name(code)
         if online_name:
-             print(f"Found online: {code} -> {online_name}")
+             print(f"Found online (Chinese): {code} -> {online_name}")
              self.update_airport(code, online_name)
              return online_name
+
+        # 3. Offline DB (English Fallback)
+        if code in self.airports_db:
+             data = self.airports_db[code]
+             city = data.get('city', '')
+             name = data.get('name', '')
+             final_name = city if city else name
+             
+             print(f"Found offline (English): {code} -> {final_name}")
+             self.update_airport(code, final_name)
+             return final_name
              
         # Not found
         return code
