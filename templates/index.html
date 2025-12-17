@@ -110,20 +110,94 @@
 
         <hr style="margin: 30px 0; border: 0; border-top: 1px solid #ddd;">
 
-        <h3>添加新机场 (Add New Airport)</h3>
-        <div class="row" style="background-color: #f9f9f9; padding: 15px; border-radius: 5px;">
-            <input type="text" id="new_code" placeholder="Code (e.g. MAD)"
+        <h3>机场代码管理 (Manage Airports)</h3>
+
+        <!-- Add/Edit Form -->
+        <div class="row"
+            style="background-color: #e8f5e9; padding: 15px; border-radius: 5px; border: 1px solid #c8e6c9;">
+            <input type="text" id="edit_code" placeholder="Code (e.g. MAD)"
                 style="width: 80px; text-transform: uppercase;">
             <span style="font-weight: bold;">:</span>
-            <input type="text" id="new_name" placeholder="Name (e.g. 马德里)" style="flex-grow: 1;">
-            <button class="btn" onclick="addAirport()" style="width: auto; background-color: #ff9800;">添加 (Add)</button>
+            <input type="text" id="edit_name" placeholder="Name (e.g. 马德里)" style="flex-grow: 1;">
+            <button class="btn" onclick="saveAirport()" id="saveBtn" style="width: auto; background-color: #ff9800;">保存
+                (Save)</button>
+        </div>
+
+        <!-- Search and List -->
+        <div style="margin-top: 20px;">
+            <input type="text" id="search_box" placeholder="Search airports..." onkeyup="filterAirports()"
+                style="width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 10px;">
+            <div id="airport_list" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 5px;">
+            </div>
         </div>
     </div>
 
     <script>
-        async function addAirport() {
-            const code = document.getElementById('new_code').value.trim();
-            const name = document.getElementById('new_name').value.trim();
+        let allAirports = {};
+
+        // Load airports on start
+        window.addEventListener('load', loadAirports);
+
+        async function loadAirports() {
+            try {
+                const response = await fetch('/airports');
+                allAirports = await response.json();
+                renderAirports();
+            } catch (e) {
+                console.error("Failed to load airports", e);
+            }
+        }
+
+        function renderAirports(filterText = '') {
+            const listDiv = document.getElementById('airport_list');
+            listDiv.innerHTML = '';
+
+            const filter = filterText.toUpperCase();
+
+            // Sort keys
+            const keys = Object.keys(allAirports).sort();
+
+            let count = 0;
+            for (const code of keys) {
+                const name = allAirports[code];
+
+                if (code.includes(filter) || name.toUpperCase().includes(filter)) {
+                    const div = document.createElement('div');
+                    div.style.padding = '5px';
+                    div.style.borderBottom = '1px solid #eee';
+                    div.style.display = 'flex';
+                    div.style.justifyContent = 'space-between';
+
+                    div.innerHTML = `
+                        <span><b>${code}</b>: ${name}</span>
+                        <button onclick="editAirport('${code}', '${name}')" style="font-size: 12px; padding: 2px 8px; background-color: #2196F3; color: white; border: none; cursor: pointer; border-radius: 3px;">Edit</button>
+                    `;
+                    listDiv.appendChild(div);
+                    count++;
+                }
+            }
+
+            if (count === 0) {
+                listDiv.innerHTML = '<div style="padding: 10px; color: #888;">No airports found.</div>';
+            }
+        }
+
+        function filterAirports() {
+            const text = document.getElementById('search_box').value;
+            renderAirports(text);
+        }
+
+        function editAirport(code, name) {
+            document.getElementById('edit_code').value = code;
+            document.getElementById('edit_name').value = name;
+            document.getElementById('edit_code').focus();
+            // Scroll to top
+            document.querySelector('h3').nextElementSibling.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function saveAirport() {
+            const code = document.getElementById('edit_code').value.trim();
+            const name = document.getElementById('edit_name').value.trim();
 
             if (!code || !name) {
                 alert("Please enter both Code and Name!");
@@ -131,7 +205,7 @@
             }
 
             try {
-                const response = await fetch('/update_mapping', {
+                const response = await fetch('/airports', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ code: code, name: name })
@@ -142,13 +216,19 @@
                     alert("Error: " + data.error);
                 } else {
                     alert(data.message);
-                    document.getElementById('new_code').value = '';
-                    document.getElementById('new_name').value = '';
+                    // Update local list
+                    allAirports[code.toUpperCase()] = name;
+                    renderAirports(document.getElementById('search_box').value);
+
+                    // Clear inputs
+                    document.getElementById('edit_code').value = '';
+                    document.getElementById('edit_name').value = '';
                 }
             } catch (e) {
                 alert("Request failed: " + e);
             }
         }
+
         async function processData() {
             const code = document.getElementById('code').value;
             const handCount = document.getElementById('hand_count').value;
