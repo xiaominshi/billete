@@ -8,7 +8,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.jinja_env.auto_reload = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 # Force-load local logic.py to avoid importing an unrelated module named 'logic'
 _logic_path = os.path.join(os.path.dirname(__file__), "logic.py")
 _spec = importlib.util.spec_from_file_location("billete_logic", _logic_path)
@@ -123,6 +126,52 @@ def manage_airports():
         else:
              return jsonify({'error': 'Failed to delete'}), 500
 
+@app.route('/airports/import', methods=['POST'])
+def import_airports():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        content = file.read().decode('utf-8', errors='ignore')
+        
+        total = 0
+        inserted = 0
+        skipped = []
+        
+        for raw_line in content.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if ":" not in line:
+                skipped.append(f"Invalid format: {raw_line}")
+                continue
+            code, name = line.split(":", 1)
+            code = code.strip().upper()
+            name = name.strip()
+            if not code or not name:
+                skipped.append(f"Missing code or name: {raw_line}")
+                continue
+            try:
+                logic.update_airport(code, name)
+                inserted += 1
+            except Exception as e:
+                skipped.append(f"DB error for {code}: {e}")
+            finally:
+                total += 1
+        
+        latest_map = logic.load_airport_map()
+        
+        return jsonify({
+            'success': True,
+            'total': total,
+            'inserted': inserted,
+            'skipped': skipped,
+            'map': latest_map
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/version', methods=['GET'])
 def version():
     # Simple health/version info
@@ -131,6 +180,16 @@ def version():
         "path": _logic_path,
         "has_year_field": any('year' in f for f in logic.flights) if logic.flights else False
     })
+
+@app.route('/template_info', methods=['GET'])
+def template_info():
+    try:
+        searchpath = getattr(app.jinja_loader, 'searchpath', [])
+        return jsonify({
+            "searchpath": searchpath
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     # Optional: Open ngrok tunnel if command line argument provided
@@ -157,4 +216,4 @@ if __name__ == '__main__':
             print(f" * Ngrok failed to start: {e}")
             print(" * Fallback to local/LAN service. Access via http://127.0.0.1:5000 or your LAN IP.")
     
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)

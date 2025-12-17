@@ -1,5 +1,5 @@
 # Document Processing
-python-docx>=0.8.11
+python-docx==0.8.11
 pypdf>=3.0.0
 reportlab>=3.6.12
 

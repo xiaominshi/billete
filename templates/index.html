@@ -488,13 +488,17 @@
                     style="width: 100px; text-transform: uppercase; font-weight:bold;">
                 <input type="text" id="edit_name" placeholder="Name (e.g. 马德里)" style="flex-grow: 1;">
                 <button class="btn btn-small" onclick="saveAirport()" style="width: auto;">💾 保存 (Save)</button>
+                <input type="file" id="airport_file" accept=".txt" style="display:none" />
+                <button class="btn btn-small btn-secondary" onclick="triggerImportAirports()" style="width:auto; margin-left:8px;">📥 批量导入 (Import .txt)</button>
             </div>
 
             <!-- Search and List -->
             <div style="margin-top: 20px;">
                 <input type="text" id="search_box" placeholder="🔍 Search airports..." onkeyup="filterAirports()"
                     style="width: 100%; margin-bottom: 15px;">
+                
                 <div id="airport_list" class="list-container" style="max-height: 300px;"></div>
+               
             </div>
         </div>
     </div>
@@ -675,6 +679,30 @@
         window.addEventListener('load', () => {
             loadAirports();
             loadHistory();
+            try {
+                if (!document.getElementById('airport_file')) {
+                    const headers = Array.from(document.querySelectorAll('.card h3'));
+                    const targetHeader = headers.find(h => h.textContent.includes('机场代码管理'));
+                    if (targetHeader) {
+                        const row = targetHeader.parentElement.querySelector('.input-row');
+                        if (row) {
+                            const fileInput = document.createElement('input');
+                            fileInput.type = 'file';
+                            fileInput.id = 'airport_file';
+                            fileInput.accept = '.txt';
+                            fileInput.style.display = 'none';
+                            const btn = document.createElement('button');
+                            btn.className = 'btn btn-small btn-secondary';
+                            btn.style.width = 'auto';
+                            btn.style.marginLeft = '8px';
+                            btn.innerText = '📥 批量导入 (Import .txt)';
+                            btn.onclick = triggerImportAirports;
+                            row.appendChild(fileInput);
+                            row.appendChild(btn);
+                        }
+                    }
+                }
+            } catch (e) { console.warn('Inject import button failed', e); }
         });
 
         // Toast Function
@@ -889,6 +917,51 @@
                 }
             } catch (e) {
                 showToast("Request failed: " + e, true);
+            }
+        }
+
+        function triggerImportAirports() {
+            const input = document.getElementById('airport_file');
+            input.value = '';
+            input.onchange = importAirportsFromFile;
+            input.click();
+        }
+
+        async function importAirportsFromFile(evt) {
+            const file = evt.target.files && evt.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const resp = await fetch('/airports/import', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    showToast("导入失败: " + data.error, true);
+                    return;
+                }
+                const inserted = data.inserted || 0;
+                const total = data.total || 0;
+                const skipped = data.skipped || [];
+                showToast(`导入完成: ${inserted}/${total} 条`);
+                // Refresh local map
+                if (data.map) {
+                    allAirports = data.map;
+                } else {
+                    // Fallback: reload from server
+                    await loadAirports();
+                }
+                renderAirports(document.getElementById('search_box').value);
+                // If there are skipped lines, log to console
+                if (skipped.length > 0) {
+                    console.warn("导入跳过的行:", skipped);
+                }
+            } catch (e) {
+                showToast("连接错误: " + e, true);
             }
         }
 
