@@ -54,6 +54,17 @@ class Logic:
             print(f"Error loading history: {e}")
             return []
 
+    def clear_history(self):
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(base_dir, "history.json")
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump([], f)
+            return True
+        except Exception as e:
+            print(f"Error clearing history: {e}")
+            return False
+
     def save_to_history(self, code, result, passenger_info="", route_info=""):
         try:
             history = self.get_history()
@@ -67,18 +78,34 @@ class Logic:
                 "route_info": route_info
             }
             
-            # Prepend (newest first)
             history.insert(0, entry)
             
-            # Limit to 50
-            if len(history) > 50:
-                history = history[:50]
+            # Filter entries older than 7 days
+            cutoff = datetime.datetime.now() - datetime.timedelta(days=7)
+            valid_history = []
+            
+            for h in history:
+                try:
+                    ts_str = h.get("timestamp")
+                    if ts_str:
+                        ts = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                        if ts > cutoff:
+                            valid_history.append(h)
+                except:
+                   # If parse fails, keep it or discard? Let's keep recent ones safely
+                   # Actually safer to just keep if we can't parse or assume old?
+                   # Let's assume valid format.
+                   pass
+            
+            # Additional safety: Limit to 100 even if within week
+            if len(valid_history) > 100:
+                valid_history = valid_history[:100]
                 
             base_dir = os.path.dirname(os.path.abspath(__file__))
             file_path = os.path.join(base_dir, "history.json")
             
             with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(history, f, ensure_ascii=False, indent=2)
+                json.dump(valid_history, f, ensure_ascii=False, indent=2)
                 
         except Exception as e:
             print(f"Error saving history: {e}")

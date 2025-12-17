@@ -80,6 +80,14 @@ def process():
 def get_history():
     return jsonify(logic.get_history())
 
+@app.route('/history', methods=['DELETE'])
+def clear_history():
+    success = logic.clear_history()
+    if success:
+        return jsonify({'message': 'History cleared'})
+    else:
+        return jsonify({'error': 'Failed to clear history'}), 500
+
 @app.route('/airports', methods=['GET'])
 def get_airports():
     return jsonify(logic.airport_map)

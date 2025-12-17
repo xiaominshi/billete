@@ -273,7 +273,11 @@
             <div
                 style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom: 2px solid var(--border); padding-bottom: 10px;">
                 <h3 style="margin:0; border:none;">📜 历史记录 (History)</h3>
-                <button class="btn btn-small btn-secondary" onclick="loadHistory()">🔄 刷新 (Refresh)</button>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-small btn-secondary" style="background-color:#EF4444;"
+                        onclick="clearHistory()">🗑️ 清空 (Clear)</button>
+                    <button class="btn btn-small btn-secondary" onclick="loadHistory()">🔄 刷新 (Refresh)</button>
+                </div>
             </div>
             <div id="history_list" class="list-container">
                 <div style="padding: 20px; text-align: center; color: var(--text-muted);">Click refresh to load
@@ -321,6 +325,23 @@
             toast.style.backgroundColor = isError ? "#EF4444" : "#10B981"; // Red for error, Green for success
             toast.className = "show";
             setTimeout(function () { toast.className = toast.className.replace("show", ""); }, 3000);
+        }
+
+        async function clearHistory() {
+            if (!confirm("Are you sure you want to clear all history? This cannot be undone.")) return;
+
+            try {
+                const response = await fetch('/history', { method: 'DELETE' });
+                const data = await response.json();
+                if (data.error) {
+                    showToast("Error: " + data.error, true);
+                } else {
+                    showToast("History cleared successfully!");
+                    loadHistory();
+                }
+            } catch (e) {
+                showToast("Failed to clear history: " + e, true);
+            }
         }
 
         // --- History Logic ---
