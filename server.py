@@ -44,6 +44,10 @@ def process():
         luggage_info = f"\n经济舱往返 欧\n托运行李{pack_count} 件,每件{pack_weight}公斤\n手提行李{hand_count}件{hand_weight} 公斤\n"
         final_result = result_text + luggage_info
         
+        # If result is suspiciously empty (only luggage), append debug logs
+        if not result_text.strip() and logic.logs:
+             final_result += "\n\n[Debug Logs (Render Fix)]:\n" + "\n".join(logic.logs)
+        
         # Construct route string for history
         route_str = ""
         if logic.flights:
