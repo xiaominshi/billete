@@ -75,7 +75,20 @@ def process():
         # Save to history
         logic.save_to_history(code, final_result, pax_str, route_str)
         
-        return jsonify({'result': final_result})
+        return jsonify({
+            'result': final_result,
+            'structured': {
+                'passengers': [p['name'] for p in logic.passengers],
+                'flights': logic.flights,
+                'layovers': logic.layovers,
+                'luggage': {
+                    'hand_count': hand_count,
+                    'hand_weight': hand_weight,
+                    'pack_count': pack_count,
+                    'pack_weight': pack_weight
+                }
+            }
+        })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -92,25 +105,32 @@ def clear_history():
     else:
         return jsonify({'error': 'Failed to clear history'}), 500
 
-@app.route('/airports', methods=['GET'])
-def get_airports():
-    return jsonify(logic.airport_map)
-
-@app.route('/airports', methods=['POST'])
-def update_airport():
-    try:
+@app.route('/airports', methods=['GET', 'POST', 'DELETE'])
+def manage_airports():
+    if request.method == 'GET':
+        return jsonify(logic.load_airport_map())
+    
+    if request.method == 'POST':
         data = request.json
-        code = data.get('code', '').upper()
-        name = data.get('name', '')
-        
+        code = data.get('code')
+        name = data.get('name')
         if not code or not name:
-             return jsonify({'error': 'Missing code or name'}), 400
-             
-        logic.update_airport(code, name)
+            return jsonify({'error': 'Missing code or name'}), 400
         
-        return jsonify({'message': f'Success: {code} -> {name}'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logic.update_airport(code, name)
+        return jsonify({'success': True, 'code': code, 'name': name})
+
+    if request.method == 'DELETE':
+        data = request.json
+        code = data.get('code')
+        if not code:
+            return jsonify({'error': 'Missing code'}), 400
+        
+        if logic.delete_airport(code):
+             return jsonify({'success': True, 'message': f'Deleted {code}'})
+        else:
+             return jsonify({'error': 'Failed to delete'}), 500
+
 
 if __name__ == '__main__':
     # Optional: Open ngrok tunnel if command line argument provided

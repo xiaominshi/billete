@@ -38,6 +38,14 @@ class Logic:
         database.upsert_airport(code, name)
         self.airport_map[code] = name
 
+    def delete_airport(self, code):
+        """Removes an airport from the database and local map."""
+        if database.delete_airport(code):
+            if code in self.airport_map:
+                del self.airport_map[code]
+            return True
+        return False
+
     def fetch_online_airport_name(self, code):
         """
         Fallback to online search using a Chinese source.
@@ -358,6 +366,82 @@ class Logic:
                     day = date_str[:2]
                     month_str = date_str[2:]
                     month = self.get_month_num(month_str)
+
+                    # Calculate Duration and Arrival Date
+                    duration_fmt = ""
+                    arrival_date_fmt = ""
+                    
+                    try:
+                        # 1. Resolve Timezones
+                        import pytz
+                        
+                        tz_origin_str = 'UTC'
+                        tz_dest_str = 'UTC'
+                        
+                        # Look up IATA codes from line parts
+                        # ori, des were extracted above
+                        if ori in self.airports_db:
+                            tz_origin_str = self.airports_db[ori]['tz']
+                        if des in self.airports_db:
+                            tz_dest_str = self.airports_db[des]['tz']
+                            
+                        tz_origin = pytz.timezone(tz_origin_str)
+                        tz_dest = pytz.timezone(tz_dest_str)
+                        
+                        # 2. Construct Datetime objects
+                        # Use current year? Or try to guess based on input date vs now?
+                        # Simplifying: Use current year.
+                        current_year = datetime.datetime.now().year
+                        month_int = int(month)
+                        day_int = int(day)
+                        
+                        start_h = int(start_time[:2])
+                        start_m = int(start_time[2:])
+                        end_h = int(end_time[:2])
+                        end_m = int(end_time[2:])
+                        
+                        # Local times
+                        dt_start_local = datetime.datetime(current_year, month_int, day_int, start_h, start_m)
+                        dt_end_local = datetime.datetime(current_year, month_int, day_int, end_h, end_m)
+                        
+                        if next_day:
+                            dt_end_local += datetime.timedelta(days=1)
+                        # Identify if end time is actually next day but no +1 is marked (e.g. crossing midnight)?
+                        # "1310 0600+1" matches explicitly.
+                        # What if "2300 0030" without +1? Usually Amadeus adds +1.
+                        # We will trust the input signs.
+                        
+                        # Localization
+                        dt_start_aware = tz_origin.localize(dt_start_local)
+                        # For end time, we need to apply the dest timezone offset, but we only have LOCAL time.
+                        # So we treat it as local time in dest TZ.
+                        # However, dt_end_local variable above was constructed using ORIGIN date + 1 day.
+                        # Is the "+1" relative to origin date? Yes, flight arrival date.
+                        
+                        # Case: Departure 10APR 23:00. Arrival 11APR 05:00 (+1).
+                        # dt_end_local is 11APR 05:00.
+                        # We treat this as local time in Destination.
+                        dt_end_aware = tz_dest.localize(dt_end_local)
+                        
+                        # Calculate Duration (Difference in absolute time)
+                        dur = dt_end_aware - dt_start_aware
+                        dur_min = int(dur.total_seconds() / 60)
+                        dur_h = dur_min // 60
+                        dur_m = dur_min % 60
+                        duration_fmt = f"{dur_h}小时 {dur_m}m"
+                        
+                        # Calculate Arrival Date String
+                        # dt_end_local is already the correct local date.
+                        # User wants "Month-Day".
+                        arr_month = dt_end_local.month
+                        arr_day = dt_end_local.day
+                        arrival_date_fmt = f"{arr_month:02d}-{arr_day:02d}"
+                        
+                    except Exception as e:
+                        print(f"Timezone calc failed: {e}")
+                        # Fallback
+                        duration_fmt = "--"
+                        arrival_date_fmt = f"{month}-{day}" # Fallback to same date? Or we don't know.
                     
                     self.flights.append({
                         "id": flight_id,
@@ -369,7 +453,9 @@ class Logic:
                         "day": day,
                         "next_day": next_day,
                         "raw_start": start_time,
-                        "raw_end": end_time
+                        "raw_end": end_time,
+                        "duration": duration_fmt,
+                        "arrival_date": arrival_date_fmt
                     })
                     
         except Exception as e:
@@ -422,12 +508,19 @@ class Logic:
                     # Return trip or stopover > 24h
                     # Add separator logic in text generation
                     curr["is_return"] = True
+                    # Also record it as a split for the visual card
+                    self.layovers.append({
+                        "type": "return_split",
+                        "flight_index": i
+                    })
                 else:
                     self.layovers.append({
-                        "place": prev["dest"], # Layover at previous destination
+                        "type": "layover",
+                        "place": prev["origin"] if 'origin' in prev else "", # Fallback
+                        "stop_place": prev["dest"], # Correct place is destination of previous
                         "hours": hours,
                         "minutes": minutes,
-                        "flight_index": i # Associate with current flight
+                        "flight_index": i # Associate with current flight (it happens BEFORE current flight)
                     })
                     
             except Exception as e:
@@ -503,8 +596,8 @@ class Logic:
             
             # Let's find if there is a layover associated with this flight (meaning before this flight)
             layover = next((l for l in self.layovers if l["flight_index"] == i), None)
-            if layover:
-                 res += f"{layover['place']}停留时间: {layover['hours']}小时{layover['minutes']}分\n"
+            if layover and layover.get('type', 'layover') == 'layover':
+                 res += f"{layover.get('place', '')}停留时间: {layover['hours']}小时{layover['minutes']}分\n"
             
             # Flight info
             res += f"{f['origin']}-{f['dest']}-->{f['start']}-{f['end']}\n"

@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LULI Web Service</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- html2canvas -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <style>
         :root {
             --primary: #4F46E5;
@@ -222,6 +224,111 @@
             border-top: 1px solid var(--border);
             margin-top: 10px;
         }
+
+        /* Beautiful Card Styles */
+        #visualCard {
+            font-family: 'Inter', sans-serif;
+            background-color: #F3F4F6;
+            /* Gray BG */
+            padding-bottom: 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            width: 800px;
+            /* Fixed width for consistent image */
+            margin: 0 auto;
+            /* Center it */
+        }
+
+        .vc-header {
+            background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%);
+            color: white;
+            padding: 24px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .vc-body {
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 35% 63%;
+            /* 2 columns */
+            gap: 2%;
+        }
+
+        .vc-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+        }
+
+        .vc-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .vc-pax-item {
+            font-family: monospace;
+            font-size: 13px;
+            padding: 6px 0;
+            border-bottom: 1px dashed #E5E7EB;
+            color: #4B5563;
+        }
+
+        .vc-flight-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .vc-flight-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .vc-flight-route {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 15px 0;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .vc-flight-details {
+            font-size: 12px;
+            color: #6B7280;
+            line-height: 1.6;
+        }
+
+        .vc-icon {
+            font-size: 18px;
+            color: #4F46E5;
+        }
+
+        .vc-luggage {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            /* display: flex; REMOVED to allow block content (Header + Content) */
+            /* justify-content: space-between; REMOVED */
+            /* align-items: center; REMOVED */
+        }
     </style>
 </head>
 
@@ -263,9 +370,95 @@
                 <button type="button" class="btn" onclick="processData()">🚀 开始翻译 (Process)</button>
             </form>
 
-            <div id="result" class="result-box" style="margin-top: 20px; display:none;"></div>
-            <button id="copyBtn" class="btn btn-copy" style="display:none;" onclick="copyResult()">📋 复制结果
-                (Copy)</button>
+            <!-- Hidden Visual Card Container for HTML2Canvas -->
+            <div style="position:absolute; left:-9999px; top:0;">
+                <div id="visualCard">
+                    <!-- Header -->
+                    <div class="vc-header">
+                        <div>
+                            <div style="font-size: 24px; font-weight: 700;">✈ 行程确认单</div>
+                            <div style="font-size: 14px; opacity: 0.9;">Flight Itinerary</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-weight: 600; font-size: 18px;">LULI Travel</div>
+                            <div style="font-size: 13px; opacity: 0.8;" id="vc-date"></div>
+                        </div>
+                    </div>
+
+                    <!-- Body -->
+                    <div class="vc-body">
+                        <!-- Left: Passengers -->
+                        <div class="vc-card">
+                            <div class="vc-section-title">
+                                <span>👥</span> 乘客信息 / Passenger Details
+                            </div>
+                            <div id="vc-pax-list">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Right: Flights & Luggage -->
+                        <div>
+                            <div id="vc-flight-list">
+                                <!-- Populated by JS -->
+                            </div>
+
+                            <div class="vc-luggage" id="vc-luggage">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div
+                        style="text-align:center; padding:15px; color:#9CA3AF; font-size:12px; border-top:1px dashed #E5E7EB;">
+                        祝您旅途愉快 Have a pleasant journey! &nbsp;|&nbsp; Generated by Billete
+                    </div>
+                </div>
+            </div>
+
+            <div id="resultCard" class="bg-white rounded-lg p-0 transition-all duration-300">
+                <!-- This inner part 'captureArea' is what we will style aggressively for the image -->
+                <div id="captureArea" style="background: white; padding: 0; border-radius: 16px; overflow: hidden;">
+
+                    <!-- Header for the Card -->
+                    <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 20px; color: white; display: none;"
+                        id="cardHeader">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h2 style="margin: 0; font-size: 24px; font-weight: 700;">✈️ 行程确认单</h2>
+                                <p style="margin: 5px 0 0; opacity: 0.9; font-size: 14px;">Flight Itinerary</p>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 600; font-size: 16px;">LULI Travel</div>
+                                <div style="font-size: 12px; opacity: 0.8;" id="dateTag"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Content -->
+                    <div id="result" class="result-box" style="margin-top: 20px; display:none;"></div>
+
+                    <!-- Footer for the Card -->
+                    <div style="background: #F9FAFB; padding: 12px 20px; border-top: 1px dashed #E5E7EB; display: none; color: #6B7280; font-size: 12px; justify-content: space-between;"
+                        id="cardFooter">
+                        <span>祝您旅途愉快 Have a pleasant journey!</span>
+                        <span>Generated by Billete</span>
+                    </div>
+                </div>
+
+                <div id="actionButtons" style="display:none; gap:10px; margin-top:20px; justify-content:flex-end;">
+                    <button id="generateImageBtn" onclick="generateImage()" class="btn btn-secondary"
+                        style="background-color: #10B981; width:auto; display: flex; align-items: center; gap: 5px;">
+                        <span>📸</span> 生成美观卡片
+                    </button>
+                    <button id="copyBtn" class="btn btn-copy"
+                        style="margin-top:0; width:auto; display: flex; align-items: center; gap: 5px;"
+                        onclick="copyResult()">
+                        <span>📋</span> 复制文本
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Card 2: History -->
@@ -310,6 +503,172 @@
     <div id="toast">Some message..</div>
 
     <script>
+        // Image Generation Logic
+        async function copyImage(blob) {
+            try {
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        [blob.type]: blob
+                    })
+                ]);
+                showToast('Image copied to clipboard!', 'success');
+            } catch (err) {
+                console.error('Failed to copy: ', err);
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'flight-itinerary.png';
+                link.click();
+                showToast('Image downloaded (Copy failed)', 'success');
+            }
+        }
+
+        function generateImage() {
+            // Check if #visualCard works
+            const paxes = document.getElementById('vc-pax-list').innerText;
+            if (!paxes) {
+                showToast('Please process flight code first!', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('generateImageBtn');
+            const originalText = btn.innerHTML;
+            btn.innerText = 'Generating...';
+
+            const captureArea = document.getElementById('visualCard');
+
+            html2canvas(captureArea, {
+                useCORS: true,
+                scale: 2.5,
+                backgroundColor: null,
+                width: 800,
+                windowWidth: 1200
+            }).then(canvas => {
+                canvas.toBlob(blob => {
+                    copyImage(blob);
+                    btn.innerHTML = originalText;
+                });
+            }).catch(err => {
+                console.error(err);
+                showToast('Failed to generate image', 'error');
+                btn.innerHTML = originalText;
+            });
+        }
+
+        function renderVisualCard(data) {
+            // Passengers
+            let paxHtml = '';
+            data.passengers.forEach((p, idx) => {
+                paxHtml += `<div class="vc-pax-item">乘客 ${idx + 1}: ${p}</div>`;
+            });
+            document.getElementById('vc-pax-list').innerHTML = paxHtml;
+
+            // Flights
+            let flightsHtml = '';
+            const layovers = data.layovers || [];
+
+            data.flights.forEach((f, idx) => {
+                // Check for layover before flight
+                const layover = layovers.find(l => l.flight_index === idx);
+                if (layover) {
+                    if (layover.type === 'return_split') {
+                        flightsHtml += `
+                         <div style="margin: 20px 0; padding:10px; background:#EEF2FF; border-radius:8px; display:flex; gap:10px; align-items:center;">
+                            <div style="font-weight:700; color:#4F46E5;">回程 Return Trip</div>
+                         </div>
+                         `;
+                    } else if (layover.type === 'layover') {
+                        flightsHtml += `
+                         <div style="margin: 10px 0 20px; padding-left:20px; font-size:13px; color:#6B7280; display:flex; align-items:center; gap:5px;">
+                            <span>⏳</span>
+                            <span>停留 ${layover.stop_place}: ${layover.hours}h ${layover.minutes}m</span>
+                         </div>
+                         `;
+                    }
+                } else if (idx === 0) {
+                    flightsHtml += `
+                     <div style="margin: 0 0 20px; padding:10px; background:#EEF2FF; border-radius:8px; display:flex; gap:10px; align-items:center;">
+                        <div style="font-weight:700; color:#4F46E5;">启程 Outbound</div>
+                     </div>`;
+                }
+
+                flightsHtml += `
+                <div class="vc-flight-card">
+                    <div class="vc-flight-header">
+                        <span>2025年${f.month}月${f.day}日 / ${f.month}-${f.day}</span>
+                        <span style="background:#F3F4F6; padding:2px 8px; border-radius:4px;">${f.id}</span>
+                    </div>
+                    <div class="vc-flight-route">
+                        <div>
+                            <div style="font-size:18px;">${f.origin}</div>
+                            <div style="font-size:14px; font-weight:600; color:#111827;">
+                                ${f.start}
+                                <div style="font-size:10px; font-weight:400; color:#6B7280; margin-top:2px;">${f.month}-${f.day}</div>
+                            </div>
+                        </div>
+                        <div style="flex-grow:1; text-align:center; padding:0 20px;">
+                            <div style="border-bottom:1px solid #E5E7EB; margin-bottom:0; position:relative; top:-5px;">
+                                <div style="position:absolute; right:0; top:-3px; width:4px; height:4px; background:#E5E7EB; border-radius:50%;"></div>
+                            </div>
+                            <div class="vc-icon">✈</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:18px;">${f.dest}</div>
+                            <div style="font-size:14px; font-weight:600; color:#111827;">
+                                ${f.end}${f.next_day ? '<span style="font-size:10px; color:red;">+1</span>' : ''}
+                                <div style="font-size:10px; font-weight:400; color:#6B7280; margin-top:2px;">${f.arrival_date || ''}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="vc-flight-details">
+                         Class: Economy | Non-Stop
+                    </div>
+                </div>
+                `;
+            });
+            document.getElementById('vc-flight-list').innerHTML = flightsHtml;
+
+            // Luggage
+            // Luggage
+            // Title for Luggage
+            flightsHtml += ``;
+            // Wait, we are modifying innerHTML of vc-luggage, but we want the title OUTSIDE the flexbox if we want it like the others?
+            // User asked: "行李额度也加像回程这样的title" (Add title like Return trip).
+            // Return trip title is full width. "vc-luggage" is a flex container currently?
+            // Let's check CSS for .vc-luggage: display: flex; justify-content: space-between;
+            // So we cannot put the full width title INSIDE .vc-luggage directly if we want it to span top.
+            // Or we change the content of .vc-luggage to be block, and have the flex part inside.
+
+            const lug = data.luggage;
+            document.getElementById('vc-luggage').innerHTML = `
+                <div style="margin: 0 0 15px; padding:10px; background:#EEF2FF; border-radius:8px; display:flex; gap:10px; align-items:center; width:100%;">
+                    <div style="font-weight:700; color:#4F46E5;">行李额度 Baggage Allowance</div>
+                </div>
+                
+                <div style="display:flex; justify-content: space-between; align-items: center; width:100%;">
+                    <div>
+                         <div style="font-weight:600; font-size:14px; margin-bottom:5px;">经济舱往返</div>
+                         <div style="font-size:12px; color:#6B7280;">
+                            Economy Round Trip
+                         </div>
+                    </div>
+                    <div style="display:flex; gap:20px; text-align:center;">
+                         <div>
+                            <div style="font-size:20px;">🧳</div>
+                            <div style="font-size:12px; font-weight:600;">${lug.pack_count} x ${lug.pack_weight}kg</div>
+                         </div>
+                         <div>
+                            <div style="font-size:20px;">👜</div>
+                            <div style="font-size:12px; font-weight:600;">${lug.hand_count} x ${lug.hand_weight}kg</div>
+                         </div>
+                    </div>
+                </div>
+            `;
+
+
+            // Date Header
+            document.getElementById('vc-date').innerText = new Date().toLocaleDateString();
+        }
+
         let allAirports = {};
 
         // Load on start
@@ -382,7 +741,7 @@
                                 <span style="font-family:monospace;">${item.timestamp}</span>
                             </div>
                         </div>
-                    `;
+                `;
 
                     // Details
                     const details = document.createElement('div');
@@ -454,7 +813,10 @@
 
                     div.innerHTML = `
                         <span><b style="color:var(--primary);">${code}</b>: ${name}</span>
-                        <button class="btn btn-small btn-secondary" onclick="editAirport('${code}', '${name}')">Edit</button>
+                        <div>
+                            <button class="btn btn-small btn-secondary" onclick="editAirport('${code}', '${name}')">Edit</button>
+                            <button class="btn btn-small btn-secondary" style="background-color:#EF4444; margin-left:5px;" onclick="deleteAirport('${code}')">Del</button>
+                        </div>
                     `;
                     listDiv.appendChild(div);
                     count++;
@@ -474,6 +836,29 @@
             document.getElementById('edit_code').focus();
             // Scroll to the edit form inside the card
             document.getElementById('edit_code').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        async function deleteAirport(code) {
+            if (!confirm(`Are you sure you want to delete ${code}?`)) return;
+
+            try {
+                const response = await fetch('/airports', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: code })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(`Deleted ${code} `);
+                    delete allAirports[code.toUpperCase()];
+                    renderAirports(document.getElementById('search_box').value);
+                } else {
+                    showToast("Error: " + (data.error || "Failed"), true);
+                }
+            } catch (e) {
+                showToast("Request failed: " + e, true);
+            }
         }
 
         async function saveAirport() {
@@ -542,7 +927,18 @@
                     const resBox = document.getElementById('result');
                     resBox.textContent = data.result;
                     resBox.style.display = 'block';
-                    document.getElementById('copyBtn').style.display = 'inline-block';
+
+                    // Populate Visual Card
+                    if (data.structured) {
+                        try {
+                            renderVisualCard(data.structured);
+                        } catch (e) { console.error("Visual render fail", e); }
+                    }
+
+                    // Show action buttons
+                    const actionBtns = document.getElementById('actionButtons');
+                    if (actionBtns) actionBtns.style.display = 'flex';
+                    else document.getElementById('copyBtn').style.display = 'inline-block';
 
                     // Auto Copy Logic
                     navigator.clipboard.writeText(data.result).then(() => {

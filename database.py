@@ -55,6 +55,19 @@ def upsert_airport(code, name):
     conn.commit()
     conn.close()
 
+def delete_airport(code):
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('DELETE FROM airports WHERE code = ?', (code.upper(),))
+        row_count = c.rowcount
+        conn.commit()
+        conn.close()
+        return row_count > 0
+    except Exception as e:
+        print(f"Delete Error: {e}")
+        return False
+
 def get_history_entries(limit=100):
     conn = get_db_connection()
     c = conn.cursor()

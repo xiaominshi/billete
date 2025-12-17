@@ -1,0 +1,51 @@
+
+        async function copyImage(blob) {
+            try {
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        [blob.type]: blob
+                    })
+                ]);
+                showToast('Image copied to clipboard!', 'success');
+            } catch (err) {
+                console.error('Failed to copy: ', err);
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'flight-itinerary.png';
+                link.click();
+                showToast('Image downloaded (Copy failed)', 'success');
+            }
+        }
+
+        function generateImage() {
+            const resultCard = document.getElementById('resultCard');
+            // We want to capture only the text result part mostly, but resultCard wraps it.
+            // If result is empty, stop
+            if (!document.getElementById('result').innerText) {
+                showToast('No result to capture', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('generateImageBtn');
+            const originalText = btn.innerText;
+            btn.innerText = 'Go...';
+            
+            // Capture JUST the result box for cleaner look, or the whole card?
+            // User probably wants the result box content.
+            const elementToCapture = document.getElementById('result');
+
+            html2canvas(elementToCapture, {
+                useCORS: true, 
+                scale: 2, 
+                backgroundColor: '#F9FAFB' // Match CSS
+            }).then(canvas => {
+                canvas.toBlob(blob => {
+                    copyImage(blob);
+                    btn.innerText = originalText;
+                });
+            }).catch(err => {
+                console.error(err);
+                showToast('Failed to generate image', 'error');
+                btn.innerText = originalText;
+            });
+        }
