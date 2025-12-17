@@ -346,9 +346,21 @@
                     summary.className = 'list-item';
                     summary.style.cursor = 'pointer';
                     summary.onclick = () => toggleHistoryDetails(index);
+
+                    const pax = item.passenger_info || 'Unknown Passenger';
+                    const route = item.route_info || 'Route Info';
+
                     summary.innerHTML = `
-                        <span style="font-weight:500; font-family:monospace;">${item.timestamp}</span>
-                        <span style="color: var(--primary); font-size: 13px;">View Details ▼</span>
+                        <div style="display:flex; flex-direction:column; gap:4px; width:100%;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-weight:600; font-size:14px; color:#1F2937;">${pax}</span>
+                                <span style="color: var(--primary); font-size: 13px;">View Details ▼</span>
+                            </div>
+                            <div style="font-size:12px; color:#6B7280; display:flex; justify-content:space-between; align-items:center;">
+                                <span style="background:#EEF2FF; color:#4F46E5; padding:2px 6px; borderRadius:4px; font-weight:500;">${route}</span>
+                                <span style="font-family:monospace;">${item.timestamp}</span>
+                            </div>
+                        </div>
                     `;
 
                     // Details
