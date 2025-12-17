@@ -30,6 +30,39 @@ history_table = Table('history', metadata,
 def init_db():
     metadata.create_all(engine)
 
+def create_user(username, password_hash):
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text("INSERT INTO users (username, password_hash) VALUES (:username, :password_hash)"),
+                {"username": username, "password_hash": password_hash}
+            )
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"Create User Error: {e}")
+        return False
+
+def get_user_by_username(username):
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("SELECT * FROM users WHERE username = :username"),
+            {"username": username}
+        ).fetchone()
+        if result:
+            return {"id": result.id, "username": result.username, "password_hash": result.password_hash}
+        return None
+
+def get_user_by_id(user_id):
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("SELECT * FROM users WHERE id = :user_id"),
+            {"user_id": user_id}
+        ).fetchone()
+        if result:
+            return {"id": result.id, "username": result.username, "password_hash": result.password_hash}
+        return None
+
 def get_all_airports():
     with engine.connect() as conn:
         result = conn.execute(text("SELECT code, name FROM airports"))
