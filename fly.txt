@@ -1,72 +1,139 @@
-PEK:北京首都
-PVG:上海浦东
-CAN:广州白云
-CTU:成都双流
-SZX:深圳宝安
-XIY:西安咸阳
-CKG:重庆江北
-KMG:昆明长水
-HGH:杭州萧山
-TSN:天津滨海
-SHA:上海虹桥
-WNZ:温州龙湾
-PKX:北京大兴
-DLC:大连周水子
-CSX:长沙黄花
-SHE:沈阳桃仙
-NKG:南京禄口
-KWE:贵阳龙洞堡
-XMN:厦门高崎
-CGO:郑州新郑
-URC:乌鲁木齐地窝堡
-CGQ:长春龙嘉
-HET:呼和浩特白塔
-HRB:哈尔滨太平
-WUH:武汉天河
-FOC:福州长乐
-HAK:海口美兰
-TAO:青岛流亭
-SYX:三亚凤凰
-LHW:兰州中川
-LHR:伦敦希斯罗
-FRA:法兰克福
+ABZ:阿伯丁
+ADD:亚的斯亚贝巴 (埃塞俄比亚)
+AGP:Malaga
+AKL:奥克兰 (新西兰)
 AMS:荷兰
-CDG:巴黎戴高乐
-FCO:罗马菲乌米奇诺
-MAD:马德里
-BCN:巴塞罗那
-MUC:慕尼黑
-ZRH:苏黎世
-VIE:维也纳
-ATH:雅典
-IST:伊斯坦布尔
-SVO:莫斯科谢列梅捷沃
-LED:圣彼得堡
 ARN:斯德哥尔摩阿兰达
-CPH:哥本哈根
-HEL:赫尔辛基
-OSL:奥斯陆
-LIS:里斯本
-DUB:都柏林
-EDI:爱丁堡
-BHX:伯明翰
-BOH:伯恩茅斯
-BRS:布里斯托尔
-CWL:加的夫
-GLA:格拉斯哥
-LPL:利物浦
-MAN:曼彻斯特
-NCL:纽卡斯尔
-SNN:香农
+ATH:雅典
+ATL:亚特兰大 (美国)
+BCN:巴塞罗那
+BER:柏林 (德国)
 BFS:贝尔法斯特
 BHD:贝尔法斯特城市
-ABZ:阿伯丁
+BHX:伯明翰
+BKK:曼谷素万那普 (泰国)
+BNE:布里斯班 (澳大利亚)
+BOG:波哥大 (哥伦比亚)
+BOH:伯恩茅斯
+BOM:孟买 (印度)
+BOS:波士顿 (美国)
+BRS:布里斯托尔
+BRU:布鲁塞尔 (比利时)
+BUD:布达佩斯 (匈牙利)
+CAI:开罗 (埃及)
+CAN:广州白云
+CDG:巴黎戴高乐
+CGO:郑州新郑
+CGQ:长春龙嘉
+CKG:重庆江北
+CMN:卡萨布兰卡 (摩洛哥)
+CPH:哥本哈根
+CPT:开普敦 (南非)
+CSX:长沙黄花
+CTU:成都双流
+CWL:加的夫
+DEL:新德里 (印度)
+DFW:达拉斯 (美国)
+DLC:大连周水子
+DME:莫斯科多莫杰多沃 (俄罗斯)
+DMK:曼谷廊曼 (泰国)
+DOH:多哈 (卡塔尔)
+DUB:都柏林
+DXB:迪拜 (阿联酋)
+EDI:爱丁堡
+EWR:纽约纽瓦克 (美国)
+EZE:布宜诺斯艾利斯 (阿根廷)
+FCO:罗马菲乌米奇诺
+FOC:福州长乐
+FRA:法兰克福
+GIG:里约热内卢 (巴西)
+GLA:格拉斯哥
+GMP:首尔金浦 (韩国)
+GRU:圣保罗 (巴西)
+GVA:日内瓦 (瑞士)
+HAK:海口美兰
+HAN:河内 (越南)
+HEL:赫尔辛基
+HET:呼和浩特白塔
+HGH:杭州萧山
+HKG:香港赤鱲角 (中国)
+HKT:普吉岛 (泰国)
+HND:东京羽田 (日本)
+HRB:哈尔滨太平
+IAD:华盛顿杜勒斯 (美国)
+IAH:休斯顿 (美国)
+ICN:首尔仁川 (韩国)
 INV:因弗内斯
-PIK:普雷斯蒂威克
+IST:伊斯坦布尔
+JFK:纽约肯尼迪 (美国)
+JNB:约翰内斯堡 (南非)
+KIX:大阪关西 (日本)
+KMG:昆明长水
+KUL:吉隆坡 (马来西亚)
+KWE:贵阳龙洞堡
+LAX:洛杉矶 (美国)
+LED:圣彼得堡
+LGA:纽约拉瓜迪亚 (美国)
 LGW:伦敦盖特威克
+LHR:伦敦希斯罗
+LHW:兰州中川
+LIM:利马 (秘鲁)
+LIS:里斯本
+LOS:拉各斯 (尼日利亚)
+LPL:利物浦
 LTN:伦敦卢顿
-STN:伦敦斯坦sted
-AGP:Malaga
+MAD:马德里
+MAN:曼彻斯特
+MEL:墨尔本 (澳大利亚)
+MEX:墨西哥城 (墨西哥)
+MFM:澳门 (中国)
+MIA:迈阿密 (美国)
+MNL:马尼拉 (菲律宾)
+MUC:慕尼黑
+MXP:米兰马尔彭萨 (意大利)
+NBO:内罗毕 (肯尼亚)
+NCL:纽卡斯尔
+NKG:南京禄口
+NRT:东京成田 (日本)
+OPO:波尔图 (葡萄牙)
+ORD:芝加哥奥黑尔 (美国)
+ORY:巴黎奥利 (法国)
+OSL:奥斯陆
+PEK:北京首都
+PER:珀斯 (澳大利亚)
+PIK:普雷斯蒂威克
+PKX:北京大兴
 PMI:Palma Mallorca
+PRG:布拉格 (捷克)
+PTY:巴拿马城 (巴拿马)
+PVG:上海浦东
+SCL:圣地亚哥 (智利)
+SEA:西雅图 (美国)
+SFO:旧金山 (美国)
+SGN:胡志明市 (越南)
+SHA:上海虹桥
+SHE:沈阳桃仙
+SIN:新加坡樟宜 (新加坡)
+SNN:香农
+STN:伦敦斯坦sted
+SVO:莫斯科谢列梅捷沃
 SXM:你爸爸
+SYD:悉尼 (澳大利亚)
+SYX:三亚凤凰
+SZX:深圳宝安
+TAO:青岛流亭
+TPE:台北桃园 (中国台湾)
+TSN:天津滨海
+ULN:Ulan Bator
+URC:乌鲁木齐地窝堡
 USH:Ushuahia
+VIE:维也纳
+WAW:华沙 (波兰)
+WNZ:温州龙湾
+WUH:武汉天河
+XIY:西安咸阳
+XMN:厦门高崎
+YUL:蒙特利尔 (加拿大)
+YVR:温哥华 (加拿大)
+YYZ:多伦多 (加拿大)
+ZRH:苏黎世
