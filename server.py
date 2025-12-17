@@ -43,9 +43,6 @@ def process():
 def get_history():
     return jsonify(logic.get_history())
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/airports', methods=['GET'])
 def get_airports():
     return jsonify(logic.airport_map)
