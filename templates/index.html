@@ -509,11 +509,16 @@
                     const resBox = document.getElementById('result');
                     resBox.textContent = data.result;
                     resBox.style.display = 'block';
-                    document.getElementById('copyBtn').style.display = 'inline-block'; // or block
+                    document.getElementById('copyBtn').style.display = 'inline-block';
 
-                    showToast("Translation processed successfully!");
+                    // Auto Copy Logic
+                    navigator.clipboard.writeText(data.result).then(() => {
+                        showToast("Processed & Auto-Copied to clipboard! 📋");
+                    }).catch(() => {
+                        showToast("Processed! (Auto-copy failed, click Copy button)");
+                    });
+
                     // Refresh history silently
-                    // But maybe we should wait a second so the user sees the toast
                     loadHistory();
                 }
             } catch (e) {
