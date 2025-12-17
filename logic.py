@@ -54,7 +54,7 @@ class Logic:
             print(f"Error loading history: {e}")
             return []
 
-    def save_to_history(self, code, result):
+    def save_to_history(self, code, result, passenger_info="", route_info=""):
         try:
             history = self.get_history()
             
@@ -62,7 +62,9 @@ class Logic:
             entry = {
                 "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "code": code,
-                "result": result
+                "result": result,
+                "passenger_info": passenger_info,
+                "route_info": route_info
             }
             
             # Prepend (newest first)

@@ -31,8 +31,45 @@ def process():
         luggage_info = f"\n经济舱往返 欧\n托运行李{pack_count} 件,每件{pack_weight}公斤\n手提行李{hand_count}件{hand_weight} 公斤\n"
         final_result = result_text + luggage_info
         
+        # Extract Metadata for history
+        pax_names = [p['name'] for p in logic.passengers]
+        pax_str = ", ".join(pax_names)
+        
+        route_str = ""
+        if logic.flights:
+            # Simple Route: First Origin -> Last Destination
+            # Or list all stops? "MAD->PEK, PEK->MAD"
+            # Let's do: Origin -> Dest
+            # If multiple flights, maybe connect them?
+            # User wants "Start End".
+            
+            # Let's try to make a compact route string: MAD-PEK
+            # taking first origin and last dest might be misleading if it's round trip MAD-PEK-MAD.
+            # So maybe "MAD-PEK-MAD" if return?
+            
+            stops = [logic.flights[0]['origin']]
+            for f in logic.flights:
+                stops.append(f['dest'])
+            
+            # Remove consecutive duplicates (if any, though origin of next should be dest of prev)
+            # Actually standard route string: MAD-PEK / PEK-MAD
+            
+            if len(logic.flights) == 1:
+                route_str = f"{logic.flights[0]['origin']}-{logic.flights[0]['dest']}"
+            else:
+                 # Check if round trip?
+                 stops_short = [logic.flights[0]['origin'], logic.flights[-1]['dest']]
+                 route_str = "-".join(stops_short)
+                 # Add intermediate? No, keep it short. "MAD-MAD" implies round trip.
+                 
+                 # Better: Construct full path "MAD-PEK-MAD"
+                 full_path = [logic.flights[0]['origin']]
+                 for f in logic.flights:
+                     full_path.append(f['dest'])
+                 route_str = "-".join(full_path)
+
         # Save to history
-        logic.save_to_history(code, final_result)
+        logic.save_to_history(code, final_result, pax_str, route_str)
         
         return jsonify({'result': final_result})
 
