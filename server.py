@@ -182,6 +182,44 @@ def import_airports():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/airports/export', methods=['GET'])
+def export_airports():
+    try:
+        airport_map = logic.load_airport_map()
+        # Sort by code
+        lines = []
+        for code in sorted(airport_map.keys()):
+            name = airport_map[code]
+            lines.append(f"{code}:{name}")
+        
+        content = "\n".join(lines)
+        
+        # Create a response with the content
+        from flask import Response
+        return Response(
+            content,
+            mimetype="text/plain",
+            headers={"Content-disposition": "attachment; filename=airports_export.txt"}
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/download_ics', methods=['GET'])
+def download_ics():
+    try:
+        ics_content = logic.generate_ics()
+        if not ics_content:
+             return jsonify({'error': 'No flight data to generate ICS'}), 400
+             
+        from flask import Response
+        return Response(
+            ics_content,
+            mimetype="text/calendar",
+            headers={"Content-disposition": "attachment; filename=itinerary.ics"}
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/version', methods=['GET'])
 def version():
     # Simple health/version info

@@ -39,7 +39,7 @@ class Logic:
 
     def load_airport_map(self):
         return database.get_all_airports()
-    
+
     def reload_airport_map(self):
         self.airport_map = database.get_all_airports()
 
@@ -72,7 +72,7 @@ class Logic:
             resp = requests.get(url, headers=headers, timeout=2)
             # This site uses legacy encoding
             resp.encoding = 'gbk'
-            
+
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
                 rows = soup.find_all('tr')
@@ -81,15 +81,15 @@ class Logic:
                     if len(cols) >= 4:
                         txts = [c.get_text().strip() for c in cols]
                         if code in txts:
-                            possible_name = txts[1] 
+                            possible_name = txts[1]
                             if possible_name == code:
                                 possible_name = txts[2]
                             if possible_name and possible_name != code:
                                 return possible_name
-                                
+
         except Exception as e:
             self.log(f"Chinese lookup failed for {code}: {e}")
-        
+
         return None
 
     def resolve_airport(self, code):
@@ -100,11 +100,11 @@ class Logic:
         3. Offline airportsdata DB (Fallback, English)
         """
         code = code.upper()
-        
+
         # 1. Local
         if code in self.airport_map:
             return self.airport_map[code]
-        
+
         # 2. Online Chinese Fallback (Preferred for Language)
         online_name = self.fetch_online_airport_name(code)
         if online_name:
@@ -118,11 +118,11 @@ class Logic:
              city = data.get('city', '')
              name = data.get('name', '')
              final_name = city if city else name
-             
+
              self.log(f"Found offline (English): {code} -> {final_name}")
              self.update_airport(code, final_name)
              return final_name
-             
+
         # Not found
         return code
 
@@ -347,11 +347,41 @@ class Logic:
                         "raw_start": start_time,
                         "raw_end": end_time,
                         "duration": duration_fmt,
-                        "arrival_date": arrival_date_fmt
+                        "arrival_date": arrival_date_fmt,
+                        "utc_start": dt_start_aware.strftime('%Y%m%dT%H%M%SZ') if 'dt_start_aware' in locals() else "",
+                        "utc_end": dt_end_aware.strftime('%Y%m%dT%H%M%SZ') if 'dt_end_aware' in locals() else ""
                     })
                     
         except Exception as e:
             self.log(f"Error parsing flight: {e}")
+
+    def generate_ics(self):
+        """Generates ICS content for all flights."""
+        if not self.flights:
+            return ""
+
+        content = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//Billete//Flight Itinerary//EN"
+        ]
+
+        for f in self.flights:
+            if not f.get("utc_start") or not f.get("utc_end"):
+                continue
+
+            content.append("BEGIN:VEVENT")
+            content.append(f"SUMMARY:Flight {f['id']} {f['origin']}-{f['dest']}")
+            content.append(f"DTSTART:{f['utc_start']}")
+            content.append(f"DTEND:{f['utc_end']}")
+            content.append(f"DESCRIPTION:Flight {f['id']} from {f['origin']} to {f['dest']}")
+            content.append(f"LOCATION:{f['origin']}")
+            content.append(f"UID:{f['id']}-{f['utc_start']}@billete.local")
+            content.append("END:VEVENT")
+
+        content.append("END:VCALENDAR")
+        return "\n".join(content)
+
 
     def calculate_layovers(self):
         self.layovers = []

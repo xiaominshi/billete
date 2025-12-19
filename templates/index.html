@@ -344,7 +344,12 @@
             <h3>翻译 (Translator)</h3>
             <form id="processForm">
                 <div style="margin-bottom: 20px;">
-                    <label style="display:block; margin-bottom: 8px; font-weight: 500;">请输入代码 (Input Code):</label>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <label style="font-weight: 500;">请输入代码 (Input Code):</label>
+                        <button type="button" class="btn btn-small btn-secondary" style="width:auto; padding:4px 8px; font-size:12px;" onclick="smartPaste()">
+                            📋 粘贴 (Paste)
+                        </button>
+                    </div>
                     <textarea id="code" name="code" placeholder="Paste flight code here..."></textarea>
                 </div>
 
@@ -388,7 +393,9 @@
                                 <div style="font-size: 13px; opacity: 0.8;" id="vc-date"></div>
                             </div>
                             <div style="text-align: center;">
-                                <img src="/static/qrcode.jpg" style="width: 60px; height: 60px; object-fit: contain; border-radius: 4px;" alt="QR" />
+                                <img id="vc-qr-img" src="/static/qrcode.jpg" 
+                                    style="width: 60px; height: 60px; object-fit: contain; border-radius: 4px;" 
+                                    alt="QR" />
                                 <div style="font-size: 8px; color: white; opacity: 0.9; margin-top: 2px;">Weixin</div>
                             </div>
                         </div>
@@ -457,6 +464,10 @@
                 </div>
 
                 <div id="actionButtons" style="display:none; gap:10px; margin-top:20px; justify-content:flex-end;">
+                    <button id="calendarBtn" onclick="downloadCalendar()" class="btn btn-secondary"
+                        style="background-color: #3B82F6; width:auto; display: flex; align-items: center; gap: 5px;">
+                        <span>📅</span> Calendar
+                    </button>
                     <button id="generateImageBtn" onclick="generateImage()" class="btn btn-secondary"
                         style="background-color: #10B981; width:auto; display: flex; align-items: center; gap: 5px;">
                         <span>📸</span> 生成航班卡片
@@ -498,7 +509,10 @@
                 <input type="text" id="edit_name" placeholder="Name (e.g. 马德里)" style="flex-grow: 1;">
                 <button class="btn btn-small" onclick="saveAirport()" style="width: auto;">💾 保存 (Save)</button>
                 <input type="file" id="airport_file" accept=".txt" style="display:none" />
-                <button class="btn btn-small btn-secondary" onclick="triggerImportAirports()" style="width:auto; margin-left:8px;">📥 批量导入 (Import .txt)</button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-small btn-secondary" onclick="triggerImportAirports()" style="width:auto;">📥 批量导入 (Import .txt)</button>
+                    <button class="btn btn-small btn-secondary" onclick="exportAirports()" style="width:auto;">📤 批量导出 (Export .txt)</button>
+                </div>
             </div>
 
             <!-- Search and List -->
@@ -607,7 +621,12 @@
                 flightsHtml += `
                 <div class="vc-flight-card">
                     <div class="vc-flight-header">
-                        <span>2025年${f.month}月${f.day}日 / ${f.month}-${f.day}</span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <img src="https://images.kiwi.com/airlines/64/${f.id.substring(0,2)}.png" 
+                                style="width:24px; height:24px; object-fit:contain; border-radius:4px;" 
+                                onerror="this.style.display='none'" />
+                            <span>2025年${f.month}月${f.day}日 / ${f.month}-${f.day}</span>
+                        </div>
                         <span style="background:#F3F4F6; padding:2px 8px; border-radius:4px;">${f.id}</span>
                     </div>
                     <div class="vc-flight-route">
@@ -688,6 +707,7 @@
         window.addEventListener('load', () => {
             loadAirports();
             loadHistory();
+            loadStats();
             try {
                 if (!document.getElementById('airport_file')) {
                     const headers = Array.from(document.querySelectorAll('.card h3'));
@@ -936,6 +956,10 @@
             input.click();
         }
 
+        function exportAirports() {
+            window.location.href = '/airports/export';
+        }
+
         async function importAirportsFromFile(evt) {
             const file = evt.target.files && evt.target.files[0];
             if (!file) return;
@@ -1001,7 +1025,11 @@
             const packCount = document.getElementById('pack_count').value;
             const packWeight = document.getElementById('pack_weight').value;
 
-            // Show loading state could be adding here later
+            // Loading State
+            const processBtn = document.querySelector('#processForm .btn');
+            const originalBtnText = processBtn.innerHTML;
+            processBtn.innerHTML = '⏳ Processing...';
+            processBtn.disabled = true;
 
             try {
                 const response = await fetch('/process', {
@@ -1049,7 +1077,14 @@
                 }
             } catch (e) {
                 showToast("Connection Error: " + e, true);
+            } finally {
+                processBtn.innerHTML = originalBtnText;
+                processBtn.disabled = false;
             }
+        }
+
+        function downloadCalendar() {
+            window.location.href = '/download_ics';
         }
 
         function copyResult() {
@@ -1059,6 +1094,23 @@
             }).catch(err => {
                 showToast("Failed to copy", true);
             });
+        }
+
+        async function smartPaste() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    const codeBox = document.getElementById('code');
+                    codeBox.value = text;
+                    codeBox.focus();
+                    showToast("Pasted from clipboard!");
+                } else {
+                    showToast("Clipboard is empty", true);
+                }
+            } catch (err) {
+                console.error('Failed to read clipboard: ', err);
+                showToast("Failed to paste (Permission denied?)", true);
+            }
         }
     </script>
 </body>
