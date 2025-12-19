@@ -335,6 +335,9 @@
 <body>
     <div class="container">
         <h1>✈️ LULI Web Service ✈️</h1>
+        <div style="text-align:center; color: #6B7280; margin-top: -20px; margin-bottom: 20px; font-size: 14px;">
+            今日搜索次数 (Today's Searches): <span id="today-count" style="font-weight:bold; color: #4F46E5;">0</span>
+        </div>
 
         <!-- Card 1: Translator -->
         <div class="card">
@@ -971,6 +974,20 @@
             }
         }
 
+        // --- Stats Logic ---
+        async function loadStats() {
+            try {
+                // Add timestamp to prevent caching
+                const response = await fetch('/stats?t=' + new Date().getTime());
+                const data = await response.json();
+                if (data.today_count !== undefined) {
+                    document.getElementById('today-count').innerText = data.today_count;
+                }
+            } catch (e) {
+                console.error("Failed to load stats", e);
+            }
+        }
+
         // --- Process Logic ---
         async function processData() {
             const code = document.getElementById('code').value;
@@ -1028,6 +1045,7 @@
 
                     // Refresh history silently
                     loadHistory();
+                    loadStats();
                 }
             } catch (e) {
                 showToast("Connection Error: " + e, true);

@@ -139,5 +139,14 @@ def clear_history_entries():
         conn.commit()
     return True
 
+def get_today_count():
+    today_prefix = datetime.datetime.now().strftime("%Y-%m-%d") + "%"
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("SELECT COUNT(*) FROM history WHERE timestamp LIKE :prefix"),
+            {"prefix": today_prefix}
+        ).scalar()
+        return result
+
 # Initialize on import
 init_db()

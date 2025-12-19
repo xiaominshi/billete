@@ -100,6 +100,16 @@ def clear_history():
     else:
         return jsonify({'error': 'Failed to clear history'}), 500
 
+@app.route('/stats', methods=['GET'])
+def get_stats():
+    try:
+        count = logic.get_today_count()
+        response = jsonify({'today_count': count})
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/airports', methods=['GET', 'POST', 'DELETE'])
 def manage_airports():
     if request.method == 'GET':

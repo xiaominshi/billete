@@ -132,6 +132,9 @@ class Logic:
     def clear_history(self):
         return database.clear_history_entries()
 
+    def get_today_count(self):
+        return database.get_today_count()
+
     def save_to_history(self, code, result, passenger_info="", route_info=""):
         try:
             database.add_history_entry(code, result, passenger_info, route_info)
