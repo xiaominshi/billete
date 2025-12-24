@@ -96,8 +96,8 @@ class Logic:
         """
         Resolve airport code to name using 3 levels:
         1. Local fly.txt (Priority)
-        2. Online Scraping (Priority for Chinese)
-        3. Offline airportsdata DB (Fallback, English)
+        2. Offline airportsdata DB (Fast, English)
+        3. Online Scraping (Slow, Fallback for Chinese)
         """
         code = code.upper()
 
@@ -105,14 +105,7 @@ class Logic:
         if code in self.airport_map:
             return self.airport_map[code]
 
-        # 2. Online Chinese Fallback (Preferred for Language)
-        online_name = self.fetch_online_airport_name(code)
-        if online_name:
-             self.log(f"Found online (Chinese): {code} -> {online_name}")
-             self.update_airport(code, online_name)
-             return online_name
-
-        # 3. Offline DB (English Fallback)
+        # 2. Offline DB (English Fallback) - MOVED UP for performance
         if code in self.airports_db:
              data = self.airports_db[code]
              city = data.get('city', '')
@@ -122,6 +115,14 @@ class Logic:
              self.log(f"Found offline (English): {code} -> {final_name}")
              self.update_airport(code, final_name)
              return final_name
+
+        # 3. Online Chinese Fallback (Preferred for Language but SLOW)
+        # Only reached if not in local map AND not in offline DB
+        online_name = self.fetch_online_airport_name(code)
+        if online_name:
+             self.log(f"Found online (Chinese): {code} -> {online_name}")
+             self.update_airport(code, online_name)
+             return online_name
 
         # Not found
         return code
@@ -519,7 +520,7 @@ class Logic:
                 is_return = True
             
             if i == 0 or f.get("is_return"):
-                res += f"【{f['month']}月{f['day']}日】\n"
+                res += f"【{f['year']}年{f['month']}月{f['day']}日】\n"
             
             layover = next((l for l in self.layovers if l["flight_index"] == i), None)
             if layover and layover.get('type', 'layover') == 'layover' and layover['hours'] >= 0:

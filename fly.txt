@@ -122,6 +122,7 @@ SYD:悉尼 (澳大利亚)
 SYX:三亚凤凰
 SZX:深圳宝安
 TAO:青岛流亭
+TFU:成都天府
 TPE:台北桃园 (中国台湾)
 TSN:天津滨海
 ULN:Ulan Bator
