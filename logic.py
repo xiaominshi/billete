@@ -441,13 +441,44 @@ class Logic:
         self.passengers = []
         self.flights = []
         self.layovers = []
-        self.current_year = self.base_year
-        self.last_month = None
         
+        # Determine year context before parsing flights
+        # Check all months in the raw code first
         try:
             cleaned_code = self.merge_lines_without_sequence_number(raw_code)
-            
             lines = cleaned_code.split("\n")
+            
+            # Extract all months in sequence
+            months_found = []
+            for line in lines:
+                if self.contain_month(line) and not "SSR" in line and not "FA" in line:
+                    parts = line.split()
+                    for part in parts:
+                        if self.contain_month(part):
+                            for m_str in ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]:
+                                if m_str in part:
+                                    months_found.append(self.get_month_num(m_str))
+                                    break
+            
+            # Logic to determine base year
+            # If we see a sequence like JAN after DEC (current month is DEC), it's next year.
+            # If current real month is e.g. DEC, and the first flight is JAN, it's definitely next year.
+            
+            current_real_date = datetime.datetime.now()
+            current_real_month = current_real_date.month
+            current_real_year = current_real_date.year
+            
+            self.current_year = current_real_year
+            self.last_month = None
+            
+            # If the first flight month is significantly earlier than current month (e.g. Current=Dec, Flight=Jan),
+            # assume the whole itinerary starts next year.
+            if months_found:
+                first_flight_month = int(months_found[0])
+                # Heuristic: if current is Oct/Nov/Dec and flight is Jan/Feb, it's next year
+                if current_real_month >= 9 and first_flight_month <= 4:
+                    self.current_year += 1
+            
             passenger_mode = True
             
             for line in lines:
