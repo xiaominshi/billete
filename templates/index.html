@@ -470,6 +470,7 @@
         <div style="text-align:center; color: #6B7280; margin-top: -10px; margin-bottom: 20px; font-size: 14px; display: flex; justify-content: center; align-items: center; gap: 15px;">
             <span><span data-i18n="today_search">今日搜索次数</span>: <span id="today-count" style="font-weight:bold; color: #4F46E5;">0</span></span>
             <button class="btn btn-small btn-secondary" style="width: auto; padding: 4px 10px;" onclick="showStats()" data-i18n="stats_btn">📊 统计</button>
+            <button class="btn btn-small btn-secondary" style="width: auto; padding: 4px 10px;" onclick="showIssued()" data-i18n="issued_btn">🎫 已出票</button>
         </div>
 
         <!-- Stats Modal -->
@@ -580,17 +581,6 @@
                 <input type="hidden" id="edit_history_id">
                 <input type="hidden" id="edit_history_index">
                 
-                <div class="input-row">
-                    <div style="flex:1;">
-                        <label style="font-size:12px; font-weight:600;">Cost (成本)</label>
-                        <input type="number" id="edit_cost" style="width:100%;" placeholder="0.00">
-                    </div>
-                    <div style="flex:1;">
-                        <label style="font-size:12px; font-weight:600;">Price (售价)</label>
-                        <input type="number" id="edit_price" style="width:100%;" placeholder="0.00">
-                    </div>
-                </div>
-                
                 <div id="edit_pax_list" style="margin-top:15px; max-height:200px; overflow-y:auto;">
                     <!-- JS populated -->
                 </div>
@@ -601,11 +591,22 @@
             </div>
         </div>
 
-        <!-- Card: Issued Orders (New) -->
-        <div class="card">
-            <h3 data-i18n="issued_title">🎫 已出票订单 (Issued Orders)</h3>
-            <div id="issued_list" class="list-container">
-                 <div style="padding: 20px; text-align: center; color: var(--text-muted);">No issued orders found.</div>
+        <!-- Issued Orders Modal -->
+        <div id="issuedModal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal" onclick="closeIssued()">&times;</span>
+                <h3 style="margin-top:0; border-bottom:none; margin-bottom:10px;" data-i18n="issued_title">🎫 已出票订单 (Issued Orders)</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <label style="font-size:12px; color:#6B7280;" data-i18n="issued_filter_month">按月份过滤</label>
+                        <input type="month" id="issued_month_filter" style="padding:6px; border:1px solid #ddd; border-radius:6px;" onchange="applyIssuedMonthFilter()">
+                        <button class="btn btn-small btn-secondary" style="width:auto;" onclick="clearIssuedMonthFilter()" data-i18n="issued_clear_btn">清除</button>
+                    </div>
+                    <div id="issued_totals" style="font-size:12px; color:#374151; font-weight:600;"></div>
+                </div>
+                <div id="issued_list" class="list-container">
+                    <div style="padding: 20px; text-align: center; color: var(--text-muted);" data-i18n="no_issued">No issued orders found</div>
+                </div>
             </div>
         </div>
 
@@ -860,6 +861,13 @@
                 // Issued Orders
                 issued_title: "🎫 已出票订单 (Issued Orders)",
                 no_issued: "暂无出票记录 (No issued orders found)",
+                issued_filter_month: "按月份过滤",
+                issued_clear_btn: "清除",
+                issued_btn: "🎫 已出票",
+                total_cost: "总成本",
+                total_price: "总售价",
+                total_profit: "总利润",
+                total_tickets: "总票数",
 
                 // Text Result
                 txt_pax: "乘客",
@@ -933,6 +941,13 @@
                 // Issued Orders
                 issued_title: "🎫 Issued Orders",
                 no_issued: "No issued orders found",
+                issued_filter_month: "Filter by month",
+                issued_clear_btn: "Clear",
+                issued_btn: "🎫 Issued",
+                total_cost: "Total Cost",
+                total_price: "Total Price",
+                total_profit: "Total Profit",
+                total_tickets: "Tickets",
 
                 // Text Result
                 txt_pax: "Passenger",
@@ -1006,6 +1021,13 @@
                 // Issued Orders
                 issued_title: "🎫 Órdenes Emitidas",
                 no_issued: "No se encontraron órdenes emitidas",
+                issued_filter_month: "Filtrar por mes",
+                issued_clear_btn: "Limpiar",
+                issued_btn: "🎫 Emitidas",
+                total_cost: "Costo Total",
+                total_price: "Precio Total",
+                total_profit: "Ganancia Total",
+                total_tickets: "Boletos",
 
                 // Text Result
                 txt_pax: "Pasajero",
@@ -1430,6 +1452,8 @@
 
         // --- History Logic ---
         let currentHistoryData = [];
+        let issuedFilterMonth = "";
+        let wasIssuedOpen = false;
 
         async function loadHistory() {
             const listDiv = document.getElementById('history_list');
@@ -1515,6 +1539,19 @@
             }
         }
         
+        function applyIssuedMonthFilter() {
+            const el = document.getElementById('issued_month_filter');
+            issuedFilterMonth = el && el.value ? el.value : "";
+            renderIssuedList(currentHistoryData);
+        }
+        
+        function clearIssuedMonthFilter() {
+            const el = document.getElementById('issued_month_filter');
+            if (el) el.value = "";
+            issuedFilterMonth = "";
+            renderIssuedList(currentHistoryData);
+        }
+        
         function renderIssuedList(history) {
             const listDiv = document.getElementById('issued_list');
             listDiv.innerHTML = '';
@@ -1547,14 +1584,69 @@
                 return hasTicket || item.cost || realPrice;
             });
             
-            if (issuedItems.length === 0) {
+            // Apply month filter
+            const filteredIssued = issuedFilterMonth 
+                ? issuedItems.filter(it => (it.timestamp || '').startsWith(issuedFilterMonth))
+                : issuedItems;
+            
+            // Compute totals
+            let totalCost = 0, totalPrice = 0, ticketCount = 0;
+            filteredIssued.forEach(item => {
+                // Prefer per-passenger totals if available
+                let cost = item.cost, price = item.price;
+                let data = null;
+                try {
+                    if (item.data_json) data = JSON.parse(item.data_json);
+                    else if (item.price && typeof item.price === 'string' && item.price.trim().startsWith('{')) {
+                        data = JSON.parse(item.price);
+                    }
+                } catch(e) {}
+                if (data && Array.isArray(data.passengers)) {
+                    const sumCost = data.passengers.reduce((acc, p) => {
+                        const v = parseFloat(p.cost);
+                        return acc + (isNaN(v) ? 0 : v);
+                    }, 0);
+                    const sumPrice = data.passengers.reduce((acc, p) => {
+                        const v = parseFloat(p.price);
+                        return acc + (isNaN(v) ? 0 : v);
+                    }, 0);
+                    if (!isNaN(sumCost)) totalCost += sumCost;
+                    if (!isNaN(sumPrice)) totalPrice += sumPrice;
+                    // Count tickets by passenger entries with ticket number
+                    ticketCount += data.passengers.reduce((acc, p) => acc + (p.ticket ? 1 : 0), 0);
+                } else {
+                    const c = parseFloat(cost);
+                    const p = parseFloat(price);
+                    if (!isNaN(c)) totalCost += c;
+                    if (!isNaN(p)) totalPrice += p;
+                    // Fallback: count FA PAX occurrences from code
+                    try {
+                        const matches = (item.code || '').match(/FA PAX/g);
+                        ticketCount += matches ? matches.length : 0;
+                    } catch(e) {}
+                }
+            });
+            const profit = totalPrice - totalCost;
+            const totalsEl = document.getElementById('issued_totals');
+            if (totalsEl) {
+                const color = profit >= 0 ? '#10B981' : '#EF4444';
+                const lang = document.documentElement.lang || 'zh';
+                const t = translations[lang] || translations['zh'];
+                const costLabel = t.total_cost || '总成本';
+                const priceLabel = t.total_price || '总售价';
+                const profitLabel = t.total_profit || '总利润';
+                const ticketsLabel = t.total_tickets || '总票数';
+                totalsEl.innerHTML = `${costLabel}: <b>${totalCost.toFixed(2)}</b> | ${priceLabel}: <b>${totalPrice.toFixed(2)}</b> <span style="color:${color}; font-weight:bold;">${profitLabel}: ${profit.toFixed(2)}</span> | ${ticketsLabel}: <b>${ticketCount}</b>`;
+            }
+            
+            if (filteredIssued.length === 0) {
                  const lang = document.documentElement.lang || 'zh';
                  const t = translations[lang] || translations['zh'];
                  listDiv.innerHTML = `<div style="padding:20px; text-align:center; color:#999;">${t.no_issued || 'No issued orders found'}</div>`;
                  return;
             }
             
-            issuedItems.forEach((item) => {
+            filteredIssued.forEach((item) => {
                 // Find original index
                 const originalIndex = currentHistoryData.findIndex(h => h.id === item.id);
                 
@@ -1623,7 +1715,7 @@
                             </div>
                         </div>
                         <div style="margin-top:8px; text-align:right;">
-                            <button class="btn btn-small btn-secondary" onclick="openEditHistory(${originalIndex})">✏️ Edit / Add Ticket</button>
+                            <button class="btn btn-small btn-secondary" onclick="openEditById(${item.id})">✏️ Edit / Add Ticket</button>
                             <button class="btn btn-small btn-secondary" style="background-color:#EF4444; margin-left:5px;" onclick="deleteHistoryItem(${item.id})">🗑️ Del</button>
                         </div>
                     </div>
@@ -1669,26 +1761,23 @@
         }
 
         function openEditHistory(index) {
+            // If issued modal is open, hide it temporarily so edit modal appears on top
+            const issuedModal = document.getElementById('issuedModal');
+            wasIssuedOpen = issuedModal && issuedModal.style.display === 'block';
+            if (wasIssuedOpen) issuedModal.style.display = 'none';
+            
             const item = currentHistoryData[index];
             if (!item) return;
             
             document.getElementById('edit_history_id').value = item.id;
             document.getElementById('edit_history_index').value = index;
-            document.getElementById('edit_cost').value = item.cost || '';
-            
-            // Handle Price (check for malformed JSON)
-            let priceVal = item.price || '';
             let dataJsonStr = item.data_json;
             
-            if (priceVal && priceVal.trim().startsWith('{')) {
+            if (item.price && item.price.trim && item.price.trim().startsWith('{')) {
                 // It's the malformed data!
                 // Use this as data source
-                dataJsonStr = priceVal;
-                // Price is actually unknown
-                priceVal = '';
+                dataJsonStr = item.price;
             }
-            
-            document.getElementById('edit_price').value = priceVal;
             
             const listDiv = document.getElementById('edit_pax_list');
             listDiv.innerHTML = '';
@@ -1763,13 +1852,17 @@
  
         function closeEditModal() {
             document.getElementById('editModal').style.display = 'none';
+            // Restore issued modal if it was previously open
+            if (wasIssuedOpen) {
+                const issuedModal = document.getElementById('issuedModal');
+                if (issuedModal) issuedModal.style.display = 'block';
+                wasIssuedOpen = false;
+            }
         }
         
         async function saveHistoryEdit() {
             const id = document.getElementById('edit_history_id').value;
             const index = document.getElementById('edit_history_index').value;
-            const cost = document.getElementById('edit_cost').value;
-            const price = document.getElementById('edit_price').value;
             
             const item = currentHistoryData[index];
             let newDataJson = null;
@@ -1820,8 +1913,8 @@
                 const v = parseFloat(input.value);
                 if (!isNaN(v)) aggPrice += v;
             });
-            const costTotal = aggCost ? aggCost.toFixed(2) : cost;
-            const priceTotal = aggPrice ? aggPrice.toFixed(2) : price;
+            const costTotal = aggCost ? aggCost.toFixed(2) : null;
+            const priceTotal = aggPrice ? aggPrice.toFixed(2) : null;
  
             try {
                 const response = await fetch('/history/update', {
@@ -2028,6 +2121,17 @@
             loadDetailedStats(currentStatsRange);
         }
         
+        function showIssued() {
+            document.getElementById('issuedModal').style.display = 'block';
+            // Ensure content is fresh
+            renderIssuedList(currentHistoryData);
+        }
+        
+        function closeIssued() {
+            const issuedModal = document.getElementById('issuedModal');
+            if (issuedModal) issuedModal.style.display = 'none';
+        }
+        
         function setStatsRange(days) {
             currentStatsRange = days;
             // Update UI
@@ -2047,10 +2151,31 @@
 
         // Close modal when clicking outside
         window.onclick = function(event) {
-            const modal = document.getElementById('statsModal');
-            if (event.target == modal) {
-                modal.style.display = "none";
+            const statsModal = document.getElementById('statsModal');
+            const issuedModal = document.getElementById('issuedModal');
+            if (event.target == statsModal) {
+                statsModal.style.display = "none";
             }
+            if (event.target == issuedModal) {
+                issuedModal.style.display = "none";
+            }
+        }
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeIssued();
+                closeEditModal();
+                closeStats();
+            }
+        });
+        
+        function openEditById(id) {
+            const idx = currentHistoryData.findIndex(h => h.id === id);
+            if (idx < 0) {
+                showToast("未找到该订单", true);
+                return;
+            }
+            openEditHistory(idx);
         }
 
         async function loadDetailedStats(days=7) {
