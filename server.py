@@ -72,7 +72,7 @@ def process():
         return jsonify({
             'result': final_result,
             'structured': {
-                'passengers': [p['name'] for p in logic.passengers],
+                'passengers': logic.passengers,
                 'flights': logic.flights,
                 'layovers': logic.layovers,
                 'luggage': {

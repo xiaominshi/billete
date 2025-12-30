@@ -24,11 +24,26 @@ history_table = Table('history', metadata,
     Column('code', String),
     Column('result', String),
     Column('passenger_info', String),
-    Column('route_info', String)
+    Column('route_info', String),
+    Column('cost', String), # Storing as String to avoid float precision issues or use Float/Numeric
+    Column('price', String),
+    Column('data_json', String) # JSON string
 )
 
 def init_db():
     metadata.create_all(engine)
+    # Auto-migration for existing DBs
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE history ADD COLUMN cost String"))
+        except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE history ADD COLUMN price String"))
+        except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE history ADD COLUMN data_json String"))
+        except Exception: pass
+        conn.commit()
 
 def create_user(username, password_hash):
     try:
@@ -203,19 +218,27 @@ def get_kpi_stats(days=7):
                 params
             ).scalar()
             
-            # Total Pax
+            # Total Pax (Based on issued tickets "FA PAX")
+            # We also need to calculate average group size for ticketed orders
             result = conn.execute(
-                text(f"SELECT passenger_info FROM history WHERE {time_filter}"),
+                text(f"SELECT code FROM history WHERE {time_filter}"),
                 params
             )
-            total_pax = 0
-            for row in result:
-                p_info = row.passenger_info or ""
-                if p_info:
-                    lines = [l for l in p_info.split('\n') if l.strip()]
-                    total_pax += len(lines)
             
-            avg_pax = round(total_pax / total_searches, 1) if total_searches > 0 else 0
+            total_pax = 0
+            ticketed_orders = 0
+            
+            for row in result:
+                code_text = row.code or ""
+                # Count FA PAX occurrences to get number of tickets
+                pax_count = code_text.count("FA PAX")
+                
+                if pax_count > 0:
+                    total_pax += pax_count
+                    ticketed_orders += 1
+            
+            # Average Pax (Average Group Size of Ticketed Orders)
+            avg_pax = round(total_pax / ticketed_orders, 1) if ticketed_orders > 0 else 0
             
             return total_searches, total_pax, avg_pax
 
@@ -382,24 +405,48 @@ def get_customer_stats(days=30, limit=50):
     start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
 
     with engine.connect() as conn:
-        # Get all passenger info
+        # Get all passenger info and code (only confirmed tickets)
         result = conn.execute(
-            text("SELECT passenger_info FROM history WHERE timestamp >= :start"),
+            text("SELECT code, passenger_info FROM history WHERE timestamp >= :start AND code LIKE '%FA PAX%'"),
             {"start": start_str}
         )
         
         pax_counts = {}
         total_pax_entries = 0
+        import re
         
         for row in result:
             p_info = row.passenger_info or ""
+            code_text = row.code or ""
             if not p_info: continue
             
+            # Extract valid passenger indices from code (e.g. /P1, /P2 in FA PAX lines)
+            # Find all FA PAX lines
+            fa_pax_matches = re.findall(r'FA PAX.*?/P(\d+)', code_text)
+            valid_indices = set()
+            if fa_pax_matches:
+                valid_indices = {int(idx) for idx in fa_pax_matches}
+            else:
+                # Fallback: if FA PAX exists but regex fails, maybe count all? 
+                # Or assume sequential? Let's assume sequential if we can't find specific P markers
+                # but generally FA PAX has /P. If not found, we might skip or include all.
+                # To be strict as requested: if no /P found but FA PAX exists, maybe it's a different format.
+                # Let's count all if valid_indices is empty but FA PAX is present (which it is due to WHERE clause)
+                # actually, to be safe, let's just use all if we can't match specific P-numbers
+                pass
+
             # Split by lines (assuming each line is a passenger)
             # Format usually: "Passenger 1: NAME/SURNAME"
             lines = [l for l in p_info.split('\n') if l.strip()]
             
-            for line in lines:
+            for i, line in enumerate(lines):
+                # 1-based index for current passenger line
+                current_pax_idx = i + 1
+                
+                # Filter: Only include if this passenger index has a ticket
+                if valid_indices and current_pax_idx not in valid_indices:
+                    continue
+
                 # Extract name logic
                 name = line.strip().upper()
                 

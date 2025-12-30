@@ -794,8 +794,8 @@
                 stats_airlines: "航空公司",
                 stats_hourly: "活跃时段",
                 kpi_searches_label: "总搜索",
-                kpi_pax_label: "总乘客",
-                kpi_avg_label: "平均人数",
+                kpi_pax_label: "总出票人数",
+                kpi_avg_label: "平均每单出票人数",
                 kpi_peak_label: "最忙碌日",
                 stats_customers: "客户分析 (Customer Insights)",
                 cust_repeat_rate: "复购率 (Repeat Rate)",
@@ -863,8 +863,8 @@
                 stats_airlines: "Airlines",
                 stats_hourly: "Hourly Activity",
                 kpi_searches_label: "Total Searches",
-                kpi_pax_label: "Total Pax",
-                kpi_avg_label: "Avg Group Size",
+                kpi_pax_label: "Total Ticketed Pax",
+                kpi_avg_label: "Avg Pax / Order",
                 kpi_peak_label: "Busiest Day",
                 stats_customers: "Customer Insights",
                 cust_repeat_rate: "Repeat Rate",
@@ -932,8 +932,8 @@
                 stats_airlines: "Aerolíneas",
                 stats_hourly: "Actividad por Hora",
                 kpi_searches_label: "Búsquedas Totales",
-                kpi_pax_label: "Pasajeros Totales",
-                kpi_avg_label: "Tamaño Medio Grupo",
+                kpi_pax_label: "Total Pasajeros Emitidos",
+                kpi_avg_label: "Promedio Pasajeros/Orden",
                 kpi_peak_label: "Día Más Concurrido",
                 stats_customers: "Análisis de Clientes",
                 cust_repeat_rate: "Tasa de Repetición",
@@ -1152,7 +1152,9 @@
             
             // Passengers
             data.passengers.forEach((p, idx) => {
-                res += `${t.txt_pax || 'Passenger'}${idx + 1}: ${p}\n`;
+                const name = p.name || p; // Support object or string
+                const ticket = p.ticket ? `\n票号: ${p.ticket}` : "";
+                res += `${t.txt_pax || 'Passenger'}${idx + 1}: ${name}${ticket}\n`;
             });
 
             // Flights
@@ -1199,7 +1201,15 @@
             // Passengers
             let paxHtml = '';
             data.passengers.forEach((p, idx) => {
-                paxHtml += `<div class="vc-pax-item">${t.vc_pax_prefix} ${idx + 1}: ${p}</div>`;
+                const name = p.name || p;
+                let ticketHtml = '';
+                if (p.ticket) {
+                    ticketHtml = `<div style="font-size:11px; color:#6B7280; margin-top:2px;">票号: ${p.ticket}</div>`;
+                }
+                paxHtml += `<div class="vc-pax-item">
+                    <div style="font-weight:600;">${t.vc_pax_prefix} ${idx + 1}: ${name}</div>
+                    ${ticketHtml}
+                </div>`;
             });
             document.getElementById('vc-pax-list').innerHTML = paxHtml;
 

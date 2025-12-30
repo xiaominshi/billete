@@ -215,19 +215,58 @@ class Logic:
 
     def parse_fa_pax(self, line_parts):
         try:
-            ticket_part = None
-            for part in line_parts:
-                if "FA" in part or "PAX" in part:
-                    continue
-                if "-" in part and "/" in part:
-                    ticket_part = part
-                    break
+            # Example: 18 FA PAX 876-5525683296/ET3U/30DEC25/VLCI12260/78234063/S3-6/P1
+            # Or merged: 18 FA PAX 876-5525683296/ET3U/30DEC25/VLCI12260/78234063/S3-6/P1
             
-            if ticket_part:
-                 ticket_data = ticket_part.split("/")
-                 ticket_num = ticket_data[0]
-                 if len(self.passengers) == 1:
-                     self.passengers[0]["ticket"] = ticket_num
+            # Use raw string from parts because basic split() might break on slashes or not
+            full_line = " ".join(line_parts)
+            
+            # Robust Regex: Look for Ticket Number (3 digits - 10 digits)
+            import re
+            
+            # Find all potential ticket numbers
+            # Capture group 1: Ticket Number
+            # Capture group 2: Remainder of string (to find P1/P2)
+            match = re.search(r'(\d{3}-\d{10})', full_line)
+            
+            if match:
+                 ticket_num = match.group(1)
+                 
+                 # Increment counter since we found a valid ticket number
+                 self.fa_pax_count += 1
+                 
+                 # Try to find passenger reference P1, P2... anywhere in the line
+                 pax_ref = None
+                 pax_match = re.search(r'/P(\d+)', full_line) # Look for /P1 pattern common in Amadeus
+                 if not pax_match:
+                      pax_match = re.search(r'\sP(\d+)', full_line) # Look for space P1
+                 
+                 if pax_match:
+                     p_idx = int(pax_match.group(1)) - 1
+                     if 0 <= p_idx < len(self.passengers):
+                         self.passengers[p_idx]["ticket"] = ticket_num
+                         self.log(f"Matched Ticket {ticket_num} to Passenger {p_idx+1} (Explicit P-ref)")
+                 else:
+                     # Fallback: Sequential Assignment
+                     # If we have 2 passengers and this is the 2nd FA PAX line, assign to 2nd passenger
+                     p_idx = self.fa_pax_count - 1
+                     if 0 <= p_idx < len(self.passengers):
+                         # Only overwrite if empty? No, FA PAX usually overrides.
+                         self.passengers[p_idx]["ticket"] = ticket_num
+                         self.log(f"Matched Ticket {ticket_num} to Passenger {p_idx+1} (Sequential Fallback)")
+            else:
+                 # Old Logic Fallback (just in case regex misses)
+                 ticket_part = None
+                 for part in line_parts:
+                    if "-" in part and "/" in part and not part.startswith("S") and len(part) > 13: 
+                        ticket_part = part
+                        break
+                 
+                 if ticket_part:
+                     ticket_num = ticket_part.split("/")[0]
+                     if len(self.passengers) == 1:
+                         self.passengers[0]["ticket"] = ticket_num
+
         except Exception as e:
             self.log(f"Error parsing FA PAX: {e}")
 
@@ -240,7 +279,19 @@ class Logic:
                     break
             
             if date_idx != -1:
-                flight_id = line_parts[1] + line_parts[2]
+                flight_id_raw = line_parts[1] + line_parts[2]
+                
+                # Fix: Extract only Flight Number (e.g., 3U3804), removing class code (e.g., N)
+                # Usually line_parts[1] is Airline (3U), line_parts[2] is Number+Class (3804N)
+                import re
+                # Match: 2 alnum (Airline) + 3-4 digits (Flight Num)
+                # Ignore subsequent chars (Class)
+                match = re.match(r'^([A-Z0-9]{2})(\d{3,4})', flight_id_raw)
+                if match:
+                    flight_id = match.group(1) + match.group(2)
+                else:
+                    flight_id = flight_id_raw # Fallback
+
                 date_str = line_parts[date_idx]
                 
                 ori_des_idx = date_idx + 2
@@ -271,8 +322,6 @@ class Logic:
                     
                     start_time_fmt = f"{start_time[:2]}:{start_time[2:]}"
                     end_time_fmt = f"{end_time[:2]}:{end_time[2:]}"
-                    if next_day:
-                        end_time_fmt += "+1"
                     
                     day = date_str[:2]
                     month_str = date_str[2:]
@@ -442,6 +491,7 @@ class Logic:
         self.passengers = []
         self.flights = []
         self.layovers = []
+        self.fa_pax_count = 0 # Track how many FA PAX lines we've seen for sequential assignment fallback
         
         # Determine year context before parsing flights
         # Check all months in the raw code first
@@ -511,8 +561,11 @@ class Logic:
     def generate_text(self):
         res = ""
         for i, p in enumerate(self.passengers):
-            res += f"乘客{i+1}: {p['name']}\n"
+            # Display Ticket Number if available on a new line
+            tkt_info = f"\n票号: {p['ticket']}" if p.get('ticket') else ""
+            res += f"乘客{i+1}: {p['name']}{tkt_info}\n"
         
+        res += "\n"
         is_return = False
         for i, f in enumerate(self.flights):
             if f.get("is_return"):
@@ -526,6 +579,9 @@ class Logic:
             if layover and layover.get('type', 'layover') == 'layover' and layover['hours'] >= 0:
                  res += f"{layover.get('place', '')}停留时间: {layover['hours']}小时{layover['minutes']}分\n"
             
-            res += f"{f['origin']}-{f['dest']}-->{f['start']}-{f['end']}\n"
+            res += f"{f['origin']}-{f['dest']}-->{f['start']}-{f['end']}"
+            if f.get('next_day'):
+                res += "+1"
+            res += "\n"
         
         return res
