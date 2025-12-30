@@ -572,6 +572,43 @@
             </div>
         </div>
 
+        <!-- Edit Order Modal -->
+        <div id="editModal" class="modal">
+            <div class="modal-content" style="max-width: 500px;">
+                <span class="close-modal" onclick="closeEditModal()">&times;</span>
+                <h3 style="margin-top:0;">✏️ Edit Order</h3>
+                <input type="hidden" id="edit_history_id">
+                <input type="hidden" id="edit_history_index">
+                
+                <div class="input-row">
+                    <div style="flex:1;">
+                        <label style="font-size:12px; font-weight:600;">Cost (成本)</label>
+                        <input type="number" id="edit_cost" style="width:100%;" placeholder="0.00">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:12px; font-weight:600;">Price (售价)</label>
+                        <input type="number" id="edit_price" style="width:100%;" placeholder="0.00">
+                    </div>
+                </div>
+                
+                <div id="edit_pax_list" style="margin-top:15px; max-height:200px; overflow-y:auto;">
+                    <!-- JS populated -->
+                </div>
+                
+                <div style="margin-top:20px; text-align:right;">
+                    <button class="btn" onclick="saveHistoryEdit()">💾 Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card: Issued Orders (New) -->
+        <div class="card">
+            <h3 data-i18n="issued_title">🎫 已出票订单 (Issued Orders)</h3>
+            <div id="issued_list" class="list-container">
+                 <div style="padding: 20px; text-align: center; color: var(--text-muted);">No issued orders found.</div>
+            </div>
+        </div>
+
         <!-- Card 1: Translator -->
         <div class="card">
             <h3 data-i18n="translator_title">翻译</h3>
@@ -820,6 +857,10 @@
                 ph_code: "在此粘贴航班代码...",
                 ph_search: "🔍 搜索机场...",
 
+                // Issued Orders
+                issued_title: "🎫 已出票订单 (Issued Orders)",
+                no_issued: "暂无出票记录 (No issued orders found)",
+
                 // Text Result
                 txt_pax: "乘客",
                 txt_return: "---------<回程>---------",
@@ -889,6 +930,10 @@
                 ph_code: "Paste flight code here...",
                 ph_search: "🔍 Search airports...",
                 
+                // Issued Orders
+                issued_title: "🎫 Issued Orders",
+                no_issued: "No issued orders found",
+
                 // Text Result
                 txt_pax: "Passenger",
                 txt_return: "---------<Return Trip>---------",
@@ -957,6 +1002,10 @@
                 toast_copy_text: "¡Copiado!",
                 ph_code: "Pegue el código aquí...",
                 ph_search: "🔍 Buscar aeropuertos...",
+
+                // Issued Orders
+                issued_title: "🎫 Órdenes Emitidas",
+                no_issued: "No se encontraron órdenes emitidas",
 
                 // Text Result
                 txt_pax: "Pasajero",
@@ -1380,73 +1429,207 @@
         }
 
         // --- History Logic ---
+        let currentHistoryData = [];
+
         async function loadHistory() {
             const listDiv = document.getElementById('history_list');
             listDiv.innerHTML = '<div style="padding:15px; text-align:center; color:#666;">Loading...</div>';
+            
+            // Also loading issued list
+            const issuedListDiv = document.getElementById('issued_list');
+            issuedListDiv.innerHTML = '<div style="padding:15px; text-align:center; color:#666;">Loading...</div>';
 
             try {
                 const response = await fetch('/history');
                 const history = await response.json();
-
+                currentHistoryData = history;
+                
+                // 1. Render Main History (Reverted to simple view)
                 listDiv.innerHTML = '';
                 if (history.length === 0) {
                     listDiv.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">No history found.</div>';
-                    return;
+                } else {
+                    history.forEach((item, index) => {
+                        const div = document.createElement('div');
+
+                        // Summary
+                        const summary = document.createElement('div');
+                        summary.className = 'list-item';
+                        summary.style.cursor = 'pointer';
+                        summary.onclick = () => toggleHistoryDetails(index);
+
+                        const pax = item.passenger_info || 'Unknown Passenger';
+                        const route = item.route_info || 'Route Info';
+                        
+                        // We do NOT show cost/price/issued status here anymore, per request to "cancel this modification"
+                        // But we might want to show a subtle indicator? No, keep it clean as requested.
+                        
+                        summary.innerHTML = `
+                            <div style="display:flex; flex-direction:column; gap:4px; width:100%;">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="font-weight:600; font-size:14px; color:#1F2937;">${pax}</span>
+                                    <span style="color: var(--primary); font-size: 13px;">View Details ▼</span>
+                                </div>
+                                <div style="font-size:12px; color:#6B7280; display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="background:#EEF2FF; color:#4F46E5; padding:2px 6px; borderRadius:4px; font-weight:500;">${route}</span>
+                                    <span style="font-family:monospace;">${item.timestamp}</span>
+                                </div>
+                            </div>
+                        `;
+
+                        // Details
+                        const details = document.createElement('div');
+                        details.id = `hist-detail-${index}`;
+                        details.className = 'details-box';
+                        details.style.display = 'none';
+
+                        details.innerHTML = `
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight:bold;">Input Code:</div>
+                            <pre style="background: white; padding: 10px; border-radius: 6px; font-size: 12px; overflow-x:auto; border:1px solid #ddd;">${item.code}</pre>
+                            
+                            <div style="font-size: 12px; color: #666; margin: 15px 0 5px; font-weight:bold;">Result:</div>
+                            <pre style="background: white; padding: 10px; border-radius: 6px; font-size: 12px; overflow-x:auto; border:1px solid #ddd;">${item.result}</pre>
+                            
+                            <div style="margin-top:15px; text-align:right;">
+                                <button class="btn btn-small btn-secondary" style="background-color:#EF4444; margin-right:5px;" onclick="deleteHistoryItem(${item.id})">🗑️ Del</button>
+                                <button class="btn btn-small" onclick="restoreHistory(${index})">📝 Use This Code</button>
+                            </div>
+                        `;
+
+                        // Store data
+                        details.dataset.code = item.code;
+
+                        div.appendChild(summary);
+                        div.appendChild(details);
+                        listDiv.appendChild(div);
+                    });
                 }
-
-                history.forEach((item, index) => {
-                    const div = document.createElement('div');
-
-                    // Summary
-                    const summary = document.createElement('div');
-                    summary.className = 'list-item';
-                    summary.style.cursor = 'pointer';
-                    summary.onclick = () => toggleHistoryDetails(index);
-
-                    const pax = item.passenger_info || 'Unknown Passenger';
-                    const route = item.route_info || 'Route Info';
-
-                    summary.innerHTML = `
-                        <div style="display:flex; flex-direction:column; gap:4px; width:100%;">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-weight:600; font-size:14px; color:#1F2937;">${pax}</span>
-                                <span style="color: var(--primary); font-size: 13px;">View Details ▼</span>
-                            </div>
-                            <div style="font-size:12px; color:#6B7280; display:flex; justify-content:space-between; align-items:center;">
-                                <span style="background:#EEF2FF; color:#4F46E5; padding:2px 6px; borderRadius:4px; font-weight:500;">${route}</span>
-                                <span style="font-family:monospace;">${item.timestamp}</span>
-                            </div>
-                        </div>
-                `;
-
-                    // Details
-                    const details = document.createElement('div');
-                    details.id = `hist-detail-${index}`;
-                    details.className = 'details-box';
-                    details.style.display = 'none';
-
-                    details.innerHTML = `
-                        <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight:bold;">Input Code:</div>
-                        <pre style="background: white; padding: 10px; border-radius: 6px; font-size: 12px; overflow-x:auto; border:1px solid #ddd;">${item.code}</pre>
-                        
-                        <div style="font-size: 12px; color: #666; margin: 15px 0 5px; font-weight:bold;">Result:</div>
-                        <pre style="background: white; padding: 10px; border-radius: 6px; font-size: 12px; overflow-x:auto; border:1px solid #ddd;">${item.result}</pre>
-                        
-                        <button class="btn btn-small" style="margin-top:15px;" onclick="restoreHistory(${index})">📝 Use This Code</button>
-                    `;
-
-                    // Store data
-                    details.dataset.code = item.code;
-
-                    div.appendChild(summary);
-                    div.appendChild(details);
-                    listDiv.appendChild(div);
-                });
+                
+                // 2. Render Issued Orders List (The new request)
+                renderIssuedList(history);
 
             } catch (e) {
                 console.error("Failed to load history", e);
                 listDiv.innerHTML = '<div style="color:red; padding:15px;">Failed to load history.</div>';
+                issuedListDiv.innerHTML = '<div style="color:red; padding:15px;">Failed to load.</div>';
             }
+        }
+        
+        function renderIssuedList(history) {
+            const listDiv = document.getElementById('issued_list');
+            listDiv.innerHTML = '';
+            
+            const issuedItems = history.filter(item => {
+                // Parse data safely, handling the known bug where JSON was saved in price column
+                let data = null;
+                let isMalformed = false;
+                
+                if (item.price && typeof item.price === 'string' && item.price.trim().startsWith('{')) {
+                     try {
+                         data = JSON.parse(item.price);
+                         isMalformed = true;
+                     } catch(e) {}
+                } else if (item.data_json) {
+                     try {
+                         data = JSON.parse(item.data_json);
+                     } catch(e) {}
+                }
+                
+                // Check if issued
+                let hasTicket = false;
+                if (data && data.passengers && data.passengers.some(p => p.ticket)) {
+                    hasTicket = true;
+                }
+                
+                // Real price check (ignore if malformed JSON)
+                const realPrice = isMalformed ? null : item.price;
+                
+                return hasTicket || item.cost || realPrice;
+            });
+            
+            if (issuedItems.length === 0) {
+                 const lang = document.documentElement.lang || 'zh';
+                 const t = translations[lang] || translations['zh'];
+                 listDiv.innerHTML = `<div style="padding:20px; text-align:center; color:#999;">${t.no_issued || 'No issued orders found'}</div>`;
+                 return;
+            }
+            
+            issuedItems.forEach((item) => {
+                // Find original index
+                const originalIndex = currentHistoryData.findIndex(h => h.id === item.id);
+                
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                
+                const pax = item.passenger_info || 'Unknown';
+                const route = item.route_info || 'Route';
+                
+                // Clean up cost/price display
+                let cost = item.cost;
+                let price = item.price;
+                // Prefer per-passenger totals if available in structured data
+                let data = null;
+                try {
+                    if (item.data_json) data = JSON.parse(item.data_json);
+                    else if (item.price && typeof item.price === 'string' && item.price.trim().startsWith('{')) {
+                        data = JSON.parse(item.price);
+                    }
+                } catch(e) {}
+                if (data && Array.isArray(data.passengers)) {
+                    const sumCost = data.passengers.reduce((acc, p) => {
+                        const v = parseFloat(p.cost);
+                        return acc + (isNaN(v) ? 0 : v);
+                    }, 0);
+                    const sumPrice = data.passengers.reduce((acc, p) => {
+                        const v = parseFloat(p.price);
+                        return acc + (isNaN(v) ? 0 : v);
+                    }, 0);
+                    if (sumCost > 0) cost = String(sumCost.toFixed(2));
+                    if (sumPrice > 0) price = String(sumPrice.toFixed(2));
+                }
+                
+                // Fix for the malformed data bug
+                if (price && typeof price === 'string' && price.trim().startsWith('{')) {
+                    price = null; // Hide the JSON string
+                }
+                
+                cost = cost || '-';
+                price = price || '-';
+                
+                // Calculate Profit
+                let profitHtml = '';
+                if (cost !== '-' && price !== '-') {
+                    const profit = (parseFloat(price) - parseFloat(cost)).toFixed(2);
+                    if (!isNaN(profit)) {
+                        const color = profit >= 0 ? '#10B981' : '#EF4444';
+                        profitHtml = `<span style="color:${color}; font-weight:bold; font-size:12px;">(Earn: ${profit})</span>`;
+                    }
+                }
+
+                div.innerHTML = `
+                    <div style="width:100%;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span style="font-weight:600; color:#1F2937;">${pax}</span>
+                            <span style="font-size:12px; color:#6B7280;">${item.timestamp.substring(0,10)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-size:12px; color:#6B7280;">
+                                <span style="background:#EEF2FF; color:#4F46E5; padding:2px 6px; borderRadius:4px;">${route}</span>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:12px; font-weight:600; color:#374151;">
+                                    Cost: ${cost} | Price: ${price} ${profitHtml}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top:8px; text-align:right;">
+                            <button class="btn btn-small btn-secondary" onclick="openEditHistory(${originalIndex})">✏️ Edit / Add Ticket</button>
+                            <button class="btn btn-small btn-secondary" style="background-color:#EF4444; margin-left:5px;" onclick="deleteHistoryItem(${item.id})">🗑️ Del</button>
+                        </div>
+                    </div>
+                `;
+                listDiv.appendChild(div);
+            });
         }
 
         function toggleHistoryDetails(index) {
@@ -1460,6 +1643,209 @@
             document.getElementById('code').value = code;
             document.getElementById('code').scrollIntoView({ behavior: 'smooth' });
             showToast("History code restored to input!");
+        }
+
+        async function deleteHistoryItem(id) {
+            if (!confirm("Are you sure you want to delete this order?")) return;
+            
+            try {
+                const response = await fetch('/history', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                const data = await response.json();
+                
+                if (data.success || data.message === 'Deleted item') {
+                    showToast("Deleted successfully!");
+                    loadHistory();
+                    loadStats();
+                } else {
+                    showToast("Failed to delete: " + (data.error || 'Unknown error'), true);
+                }
+            } catch(e) {
+                showToast("Request failed: " + e, true);
+            }
+        }
+
+        function openEditHistory(index) {
+            const item = currentHistoryData[index];
+            if (!item) return;
+            
+            document.getElementById('edit_history_id').value = item.id;
+            document.getElementById('edit_history_index').value = index;
+            document.getElementById('edit_cost').value = item.cost || '';
+            
+            // Handle Price (check for malformed JSON)
+            let priceVal = item.price || '';
+            let dataJsonStr = item.data_json;
+            
+            if (priceVal && priceVal.trim().startsWith('{')) {
+                // It's the malformed data!
+                // Use this as data source
+                dataJsonStr = priceVal;
+                // Price is actually unknown
+                priceVal = '';
+            }
+            
+            document.getElementById('edit_price').value = priceVal;
+            
+            const listDiv = document.getElementById('edit_pax_list');
+            listDiv.innerHTML = '';
+            
+            if (dataJsonStr) {
+                try {
+                    const data = JSON.parse(dataJsonStr);
+                    const passengers = data.passengers || [];
+                    
+                    if (passengers.length > 0) {
+                        listDiv.innerHTML = '<div style="font-size:12px; font-weight:600; margin-bottom:8px;">每人票号 / 成本 / 售价</div>';
+                        passengers.forEach((p, idx) => {
+                            const name = p.name || p; // Handle string or object
+                            const ticket = p.ticket || '';
+                            const pcost = p.cost !== undefined ? p.cost : '';
+                            const pprice = p.price !== undefined ? p.price : '';
+                            const row = document.createElement('div');
+                            row.style.marginBottom = '8px';
+                            row.innerHTML = `
+                                <div style="font-size:12px; color:#666;">${name}</div>
+                                <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:8px; align-items:center;">
+                                    <input type="text" class="edit-ticket-input" data-idx="${idx}" value="${ticket}" placeholder="票号" style="width:100%; padding:5px; font-size:12px;">
+                                    <input type="number" step="0.01" class="edit-cost-input" data-idx="${idx}" value="${pcost}" placeholder="成本" style="width:100%; padding:5px; font-size:12px;">
+                                    <input type="number" step="0.01" class="edit-price-input" data-idx="${idx}" value="${pprice}" placeholder="售价" style="width:100%; padding:5px; font-size:12px;">
+                                </div>
+                            `;
+                            listDiv.appendChild(row);
+                        });
+                        // Summary row
+                        const sumDiv = document.createElement('div');
+                        sumDiv.style.marginTop = '10px';
+                        sumDiv.style.fontSize = '12px';
+                        sumDiv.style.color = '#374151';
+                        sumDiv.innerHTML = '<span id="edit_summary_totals"></span>';
+                        listDiv.appendChild(sumDiv);
+                        // Auto-update summary on input
+                        setTimeout(() => {
+                            document.querySelectorAll('.edit-cost-input, .edit-price-input').forEach(inp => {
+                                inp.addEventListener('input', updateEditTotals);
+                            });
+                            updateEditTotals();
+                        }, 0);
+                    }
+                } catch (e) {
+                    console.error("JSON parse error", e);
+                    listDiv.innerHTML = '<div style="color:orange; font-size:12px;">Cannot edit tickets (Old format).</div>';
+                }
+            } else {
+                listDiv.innerHTML = '<div style="color:gray; font-size:12px;">No passenger details available for editing.</div>';
+            }
+            
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        function updateEditTotals() {
+            let costSum = 0, priceSum = 0;
+            document.querySelectorAll('.edit-cost-input').forEach(inp => {
+                const v = parseFloat(inp.value);
+                if (!isNaN(v)) costSum += v;
+            });
+            document.querySelectorAll('.edit-price-input').forEach(inp => {
+                const v = parseFloat(inp.value);
+                if (!isNaN(v)) priceSum += v;
+            });
+            const el = document.getElementById('edit_summary_totals');
+            if (el) {
+                const profit = (priceSum - costSum).toFixed(2);
+                const color = (priceSum - costSum) >= 0 ? '#10B981' : '#EF4444';
+                el.innerHTML = `合计 成本: <b>${costSum.toFixed(2)}</b> | 售价: <b>${priceSum.toFixed(2)}</b> <span style="color:${color}; font-weight:bold;">(Profit: ${profit})</span>`;
+            }
+        }
+ 
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+        
+        async function saveHistoryEdit() {
+            const id = document.getElementById('edit_history_id').value;
+            const index = document.getElementById('edit_history_index').value;
+            const cost = document.getElementById('edit_cost').value;
+            const price = document.getElementById('edit_price').value;
+            
+            const item = currentHistoryData[index];
+            let newDataJson = null;
+            
+            // Try to recover data source (either data_json or malformed price)
+            let sourceJson = item.data_json;
+            if (!sourceJson && item.price && typeof item.price === 'string' && item.price.trim().startsWith('{')) {
+                sourceJson = item.price;
+            }
+            
+            if (sourceJson) {
+                try {
+                    const data = JSON.parse(sourceJson);
+                    // Update tickets
+                    const inputs = document.querySelectorAll('.edit-ticket-input');
+                    inputs.forEach(input => {
+                        const idx = parseInt(input.dataset.idx);
+                        if (data.passengers[idx]) {
+                            data.passengers[idx].ticket = input.value;
+                        }
+                    });
+                    // Update per-passenger cost/price
+                    document.querySelectorAll('.edit-cost-input').forEach(input => {
+                        const idx = parseInt(input.dataset.idx);
+                        const val = parseFloat(input.value);
+                        if (data.passengers[idx]) {
+                            data.passengers[idx].cost = isNaN(val) ? null : Number(val.toFixed(2));
+                        }
+                    });
+                    document.querySelectorAll('.edit-price-input').forEach(input => {
+                        const idx = parseInt(input.dataset.idx);
+                        const val = parseFloat(input.value);
+                        if (data.passengers[idx]) {
+                            data.passengers[idx].price = isNaN(val) ? null : Number(val.toFixed(2));
+                        }
+                    });
+                    newDataJson = JSON.stringify(data);
+                } catch(e) {}
+            }
+            
+            // Aggregate totals from inputs (per passenger)
+            let aggCost = 0, aggPrice = 0;
+            document.querySelectorAll('.edit-cost-input').forEach(input => {
+                const v = parseFloat(input.value);
+                if (!isNaN(v)) aggCost += v;
+            });
+            document.querySelectorAll('.edit-price-input').forEach(input => {
+                const v = parseFloat(input.value);
+                if (!isNaN(v)) aggPrice += v;
+            });
+            const costTotal = aggCost ? aggCost.toFixed(2) : cost;
+            const priceTotal = aggPrice ? aggPrice.toFixed(2) : price;
+ 
+            try {
+                const response = await fetch('/history/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: id,
+                        cost: costTotal,
+                        price: priceTotal,
+                        data_json: newDataJson
+                    })
+                });
+                
+                const res = await response.json();
+                if (res.success) {
+                    showToast("Order updated!");
+                    closeEditModal();
+                    loadHistory(); // Reload
+                } else {
+                    showToast("Error: " + res.error, true);
+                }
+            } catch (e) {
+                showToast("Request failed: " + e, true);
+            }
         }
 
         // --- Airport Logic ---

@@ -129,6 +129,9 @@ class Logic:
 
     def get_history(self):
         return database.get_history_entries(limit=50)
+        
+    def delete_history_item(self, history_id):
+        return database.delete_history_entry(history_id)
 
     def clear_history(self):
         return database.clear_history_entries()
@@ -136,9 +139,18 @@ class Logic:
     def get_today_count(self):
         return database.get_today_count()
 
-    def save_to_history(self, code, result, passenger_info="", route_info=""):
+    def save_to_history(self, code, result, passenger_info="", route_info="", cost=None, price=None, data_json=None):
         try:
-            database.add_history_entry(code, result, passenger_info, route_info)
+            # Must use keyword arguments to avoid positional mismatch with timestamp
+            database.add_history_entry(
+                code, 
+                result, 
+                passenger_info, 
+                route_info, 
+                cost=cost, 
+                price=price, 
+                data_json=data_json
+            )
         except Exception as e:
             self.log(f"Error saving history: {e}")
 

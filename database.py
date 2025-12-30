@@ -120,15 +120,19 @@ def get_history_entries(limit=100):
         for row in result:
             # SQLAlchemy rows behave like named tuples
             history.append({
+                "id": row.id,
                 "timestamp": row.timestamp,
                 "code": row.code,
                 "result": row.result,
                 "passenger_info": row.passenger_info,
-                "route_info": row.route_info
+                "route_info": row.route_info,
+                "cost": row.cost,
+                "price": row.price,
+                "data_json": row.data_json
             })
         return history
 
-def add_history_entry(code, result, passenger_info, route_info, timestamp=None):
+def add_history_entry(code, result, passenger_info, route_info, timestamp=None, cost=None, price=None, data_json=None):
     if not timestamp:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -141,18 +145,51 @@ def add_history_entry(code, result, passenger_info, route_info, timestamp=None):
         
         conn.execute(
             text('''
-                INSERT INTO history (timestamp, code, result, passenger_info, route_info)
-                VALUES (:timestamp, :code, :result, :passenger_info, :route_info)
+                INSERT INTO history (timestamp, code, result, passenger_info, route_info, cost, price, data_json)
+                VALUES (:timestamp, :code, :result, :passenger_info, :route_info, :cost, :price, :data_json)
             '''),
             {
                 "timestamp": timestamp,
                 "code": code,
                 "result": result,
                 "passenger_info": passenger_info,
-                "route_info": route_info
+                "route_info": route_info,
+                "cost": cost,
+                "price": price,
+                "data_json": data_json
             }
         )
         conn.commit()
+
+def update_history_entry(history_id, cost=None, price=None, data_json=None):
+    with engine.connect() as conn:
+        updates = {}
+        if cost is not None: updates['cost'] = cost
+        if price is not None: updates['price'] = price
+        if data_json is not None: updates['data_json'] = data_json
+        
+        if not updates: return False
+        
+        # Build set clause
+        set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
+        updates['id'] = history_id
+        
+        conn.execute(
+            text(f"UPDATE history SET {set_clause} WHERE id = :id"),
+            updates
+        )
+        conn.commit()
+        return True
+
+def delete_history_entry(history_id):
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("DELETE FROM history WHERE id = :id"), {"id": history_id})
+            conn.commit()
+            return result.rowcount > 0
+    except Exception as e:
+        print(f"Delete History Entry Error: {e}")
+        return False
 
 def clear_history_entries():
     with engine.connect() as conn:

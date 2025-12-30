@@ -67,21 +67,25 @@ def process():
         pax_str = ", ".join(pax_names)
 
         # Save to history
-        logic.save_to_history(code, final_result, pax_str, route_str)
+        import json
+        structured_data = {
+            'passengers': logic.passengers,
+            'flights': logic.flights,
+            'layovers': logic.layovers,
+            'luggage': {
+                'hand_count': hand_count,
+                'hand_weight': hand_weight,
+                'pack_count': pack_count,
+                'pack_weight': pack_weight
+            }
+        }
+        data_json = json.dumps(structured_data)
+
+        logic.save_to_history(code, final_result, pax_str, route_str, data_json=data_json)
         
         return jsonify({
             'result': final_result,
-            'structured': {
-                'passengers': logic.passengers,
-                'flights': logic.flights,
-                'layovers': logic.layovers,
-                'luggage': {
-                    'hand_count': hand_count,
-                    'hand_weight': hand_weight,
-                    'pack_count': pack_count,
-                    'pack_weight': pack_weight
-                }
-            }
+            'structured': structured_data
         })
 
     except Exception as e:
@@ -94,11 +98,47 @@ def get_history():
 
 @app.route('/history', methods=['DELETE'])
 def clear_history():
+    # If JSON provided with 'id', delete single item
+    if request.is_json:
+        data = request.json
+        if 'id' in data:
+             if logic.delete_history_item(data['id']):
+                 return jsonify({'success': True, 'message': 'Deleted item'})
+             else:
+                 return jsonify({'error': 'Failed to delete item'}), 404
+                 
+    # Otherwise clear all
     success = logic.clear_history()
     if success:
         return jsonify({'message': 'History cleared'})
     else:
         return jsonify({'error': 'Failed to clear history'}), 500
+
+@app.route('/history/update', methods=['POST'])
+def update_history():
+    try:
+        import database
+        data = request.json
+        history_id = data.get('id')
+        cost = data.get('cost')
+        price = data.get('price')
+        data_json = data.get('data_json') # Can be passed as string or object
+        
+        if not history_id:
+            return jsonify({'error': 'Missing history ID'}), 400
+            
+        if isinstance(data_json, dict):
+            import json
+            data_json = json.dumps(data_json)
+            
+        success = database.update_history_entry(history_id, cost, price, data_json)
+        
+        if success:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Failed to update'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/stats', methods=['GET'])
 def get_stats():
