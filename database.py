@@ -118,6 +118,12 @@ def add_history_entry(code, result, passenger_info, route_info, timestamp=None):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
     with engine.connect() as conn:
+        # Deduplication: Remove old entries with the same input code to keep only the latest
+        conn.execute(
+            text("DELETE FROM history WHERE code = :code"),
+            {"code": code}
+        )
+        
         conn.execute(
             text('''
                 INSERT INTO history (timestamp, code, result, passenger_info, route_info)
@@ -171,52 +177,81 @@ def get_today_count():
 def get_kpi_stats(days=7):
     """
     Get Key Performance Indicators (KPIs) for the last 'days' days.
+    Also calculates trend vs previous period.
     """
-    start_date = datetime.datetime.now() - datetime.timedelta(days=days)
-    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.datetime.now()
+    start_date = now - datetime.timedelta(days=days)
+    prev_start_date = start_date - datetime.timedelta(days=days)
     
+    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
+    prev_start_str = prev_start_date.strftime("%Y-%m-%d %H:%M:%S")
+    prev_end_str = start_str # Previous period ends where current begins
+
+    def calculate_metrics(s_date, e_date=None):
+        with engine.connect() as conn:
+            # Time filter
+            if e_date:
+                time_filter = "timestamp >= :start AND timestamp < :end"
+                params = {"start": s_date, "end": e_date}
+            else:
+                time_filter = "timestamp >= :start"
+                params = {"start": s_date}
+
+            # Total Searches
+            total_searches = conn.execute(
+                text(f"SELECT COUNT(*) FROM history WHERE {time_filter}"),
+                params
+            ).scalar()
+            
+            # Total Pax
+            result = conn.execute(
+                text(f"SELECT passenger_info FROM history WHERE {time_filter}"),
+                params
+            )
+            total_pax = 0
+            for row in result:
+                p_info = row.passenger_info or ""
+                if p_info:
+                    lines = [l for l in p_info.split('\n') if l.strip()]
+                    total_pax += len(lines)
+            
+            avg_pax = round(total_pax / total_searches, 1) if total_searches > 0 else 0
+            
+            return total_searches, total_pax, avg_pax
+
+    # Current Period
+    curr_searches, curr_pax, curr_avg = calculate_metrics(start_str)
+    
+    # Previous Period
+    prev_searches, prev_pax, prev_avg = calculate_metrics(prev_start_str, start_str)
+    
+    # Calculate Changes (%)
+    def calc_change(curr, prev):
+        if prev == 0:
+            return 100 if curr > 0 else 0
+        return round(((curr - prev) / prev) * 100, 1)
+
+    change_searches = calc_change(curr_searches, prev_searches)
+    change_pax = calc_change(curr_pax, prev_pax)
+    change_avg = calc_change(curr_avg, prev_avg)
+
+    # Busiest Day (Current Period Only)
     with engine.connect() as conn:
-        # Total Searches
-        total_searches = conn.execute(
-            text("SELECT COUNT(*) FROM history WHERE timestamp >= :start"),
-            {"start": start_str}
-        ).scalar()
-        
-        # Calculate Pax Count (Rough approximation by counting 'Passenger' keywords or lines)
-        # Doing this in Python for flexibility
-        result = conn.execute(
-            text("SELECT passenger_info FROM history WHERE timestamp >= :start"),
-            {"start": start_str}
-        )
-        
-        total_pax = 0
-        for row in result:
-            p_info = row.passenger_info or ""
-            # Simple heuristic: count newlines + 1 (if not empty) or count explicit "Passenger" word
-            if p_info:
-                # Assuming standard format "Passenger 1: ... \n Passenger 2: ..."
-                # Or user might paste just names.
-                # Let's count non-empty lines as passengers
-                lines = [l for l in p_info.split('\n') if l.strip()]
-                total_pax += len(lines)
-                
-        avg_pax = round(total_pax / total_searches, 1) if total_searches > 0 else 0
-        
-        # Busiest Day
-        # Using Python aggregation for simplicity cross-db
         daily_res = conn.execute(
             text("SELECT SUBSTR(timestamp, 1, 10) as dt, COUNT(*) as cnt FROM history WHERE timestamp >= :start GROUP BY dt ORDER BY cnt DESC LIMIT 1"),
             {"start": start_str}
         ).fetchone()
-        
         busiest_day = daily_res.dt if daily_res else "N/A"
         
-        return {
-            "total_searches": total_searches,
-            "total_pax": total_pax,
-            "avg_pax": avg_pax,
-            "busiest_day": busiest_day
-        }
+    return {
+        "total_searches": curr_searches,
+        "total_pax": curr_pax,
+        "avg_pax": curr_avg,
+        "busiest_day": busiest_day,
+        "trend_searches": change_searches,
+        "trend_pax": change_pax,
+        "trend_avg": change_avg
+    }
 
 def get_daily_stats(days=7):
     """
@@ -337,6 +372,89 @@ def get_all_history_for_export():
             "passenger_info": row.passenger_info,
             "route_info": row.route_info
         } for row in result]
+
+def get_customer_stats(days=30, limit=50):
+    """
+    Analyze customer loyalty (new vs returning) and find top customers.
+    limit increased to 50 for scrollable list.
+    """
+    start_date = datetime.datetime.now() - datetime.timedelta(days=days)
+    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    with engine.connect() as conn:
+        # Get all passenger info
+        result = conn.execute(
+            text("SELECT passenger_info FROM history WHERE timestamp >= :start"),
+            {"start": start_str}
+        )
+        
+        pax_counts = {}
+        total_pax_entries = 0
+        
+        for row in result:
+            p_info = row.passenger_info or ""
+            if not p_info: continue
+            
+            # Split by lines (assuming each line is a passenger)
+            # Format usually: "Passenger 1: NAME/SURNAME"
+            lines = [l for l in p_info.split('\n') if l.strip()]
+            
+            for line in lines:
+                # Extract name logic
+                name = line.strip().upper()
+                
+                # If it looks like "Passenger 1: NAME", split it
+                if ':' in name:
+                    parts = name.split(':', 1)
+                    # Heuristic: if left side contains "Passenger" or digit, take right side
+                    if "PASSENGER" in parts[0] or any(char.isdigit() for char in parts[0]):
+                        name = parts[1].strip()
+                
+                # Basic cleanup
+                for title in ["MR", "MS", "MRS", "MISS", "MSTR"]:
+                    if name.endswith(" " + title):
+                        name = name[:-(len(title)+1)].strip()
+                    elif name.startswith(title + " "):
+                        name = name[(len(title)+1):].strip()
+                
+                # Remove leading numbering like "1. "
+                import re
+                name = re.sub(r'^\d+\.?\s*', '', name)
+                
+                # Check for multiple names on one line (comma separated)
+                # e.g. "ZHENG/YANGUANG, WANG/QI"
+                if ',' in name:
+                    sub_names = [n.strip() for n in name.split(',')]
+                    for sub_name in sub_names:
+                        if len(sub_name) < 2: continue
+                        pax_counts[sub_name] = pax_counts.get(sub_name, 0) + 1
+                        total_pax_entries += 1
+                    continue # Skip adding the full line
+                
+                if len(name) < 2: continue # Skip very short names
+                
+                pax_counts[name] = pax_counts.get(name, 0) + 1
+                total_pax_entries += 1
+                
+        # Calculate Stats
+        unique_customers = len(pax_counts)
+        returning_customers = sum(1 for count in pax_counts.values() if count > 1)
+        new_customers = unique_customers - returning_customers
+        
+        repeat_rate = round((returning_customers / unique_customers * 100), 1) if unique_customers > 0 else 0
+        
+        # Top Customers
+        sorted_pax = sorted(pax_counts.items(), key=lambda x: x[1], reverse=True)
+        top_customers = [{"name": k, "count": v} for k, v in sorted_pax[:limit]]
+        
+        return {
+            "total_pax_entries": total_pax_entries,
+            "unique_customers": unique_customers,
+            "returning_customers": returning_customers,
+            "new_customers": new_customers,
+            "repeat_rate": repeat_rate,
+            "top_customers": top_customers
+        }
 
 # Initialize on import
 init_db()

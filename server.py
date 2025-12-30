@@ -121,13 +121,15 @@ def get_detailed_stats():
         airline_stats = database.get_airline_stats(days, 1000)
         hourly_stats = database.get_hourly_stats(days, 1000)
         kpi_stats = database.get_kpi_stats(days)
+        customer_stats = database.get_customer_stats(days)
         
         return jsonify({
             'daily': daily_stats,
             'top_routes': top_routes,
             'airlines': airline_stats,
             'hourly': hourly_stats,
-            'kpi': kpi_stats
+            'kpi': kpi_stats,
+            'customers': customer_stats
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

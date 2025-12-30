@@ -483,18 +483,22 @@
                     <div style="background:#EEF2FF; padding:15px; border-radius:8px; text-align:center;">
                         <div style="font-size:12px; color:#6B7280; font-weight:600;" data-i18n="kpi_searches_label">Total Searches</div>
                         <div id="kpi_searches" style="font-size:24px; font-weight:700; color:#4F46E5;">0</div>
+                        <div id="kpi_searches_trend" style="font-size:11px; margin-top:4px; font-weight:500;"></div>
                     </div>
                     <div style="background:#ECFDF5; padding:15px; border-radius:8px; text-align:center;">
                         <div style="font-size:12px; color:#6B7280; font-weight:600;" data-i18n="kpi_pax_label">Total Pax</div>
                         <div id="kpi_pax" style="font-size:24px; font-weight:700; color:#10B981;">0</div>
+                        <div id="kpi_pax_trend" style="font-size:11px; margin-top:4px; font-weight:500;"></div>
                     </div>
                     <div style="background:#FFF7ED; padding:15px; border-radius:8px; text-align:center;">
                         <div style="font-size:12px; color:#6B7280; font-weight:600;" data-i18n="kpi_avg_label">Avg Group Size</div>
                         <div id="kpi_avg" style="font-size:24px; font-weight:700; color:#F59E0B;">0</div>
+                        <div id="kpi_avg_trend" style="font-size:11px; margin-top:4px; font-weight:500;"></div>
                     </div>
                     <div style="background:#F3F4F6; padding:15px; border-radius:8px; text-align:center;">
                         <div style="font-size:12px; color:#6B7280; font-weight:600;" data-i18n="kpi_peak_label">Busiest Day</div>
                         <div id="kpi_peak" style="font-size:16px; font-weight:700; color:#374151; margin-top:5px;">N/A</div>
+                        <div style="font-size:11px; margin-top:4px; color:transparent;">-</div> <!-- Spacer -->
                     </div>
                 </div>
 
@@ -508,7 +512,7 @@
                         </div>
                     </div>
                     <div>
-                        <button class="btn btn-small btn-secondary" onclick="exportHistoryToCSV()" style="width:auto; font-size:12px;" data-i18n="btn_export_csv">📥 导出 (CSV)</button>
+                        <!-- Removed export button -->
                     </div>
                 </div>
 
@@ -538,6 +542,32 @@
                     <div style="height: 150px;">
                         <canvas id="hourlyChart"></canvas>
                     </div>
+                </div>
+
+                <!-- Customer Analysis -->
+                <div style="margin-top:20px; border-top:1px dashed #E5E7EB; padding-top:20px;">
+                     <h4 style="margin:0 0 15px 0; color:#4B5563;" data-i18n="stats_customers">客户分析 (Customer Insights)</h4>
+                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:20px;">
+                        <!-- KPI -->
+                        <div style="background:#F0FDF4; padding:20px; border-radius:8px; text-align:center; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size:13px; color:#6B7280; margin-bottom:5px;" data-i18n="cust_repeat_rate">复购率 (Repeat Rate)</div>
+                            <div id="cust_rate" style="font-size:32px; font-weight:700; color:#15803D;">0%</div>
+                            <div style="font-size:11px; color:#15803D;" id="cust_counts">0 / 0</div>
+                        </div>
+                        
+                        <!-- Pie Chart -->
+                        <div style="height:150px; display:flex; justify-content:center;">
+                            <canvas id="customerChart"></canvas>
+                        </div>
+                        
+                        <!-- Top List -->
+                        <div style="background:#F9FAFB; padding:15px; border-radius:8px;">
+                            <div style="font-size:12px; font-weight:600; color:#6B7280; margin-bottom:10px;" data-i18n="cust_top_list">🏆 忠实客户列表</div>
+                            <div id="top_customers_list" style="font-size:12px; display:flex; flex-direction:column; gap:6px; max-height:150px; overflow-y:auto; padding-right:5px;">
+                                <!-- JS -->
+                            </div>
+                        </div>
+                     </div>
                 </div>
             </div>
         </div>
@@ -767,6 +797,11 @@
                 kpi_pax_label: "总乘客",
                 kpi_avg_label: "平均人数",
                 kpi_peak_label: "最忙碌日",
+                stats_customers: "客户分析 (Customer Insights)",
+                cust_repeat_rate: "复购率 (Repeat Rate)",
+                cust_top_list: "🏆 忠实客户列表 (Top List)",
+                cust_new: "新客户",
+                cust_returning: "老客户",
                 btn_7d: "7天",
                 btn_30d: "30天",
                 btn_90d: "90天",
@@ -831,6 +866,11 @@
                 kpi_pax_label: "Total Pax",
                 kpi_avg_label: "Avg Group Size",
                 kpi_peak_label: "Busiest Day",
+                stats_customers: "Customer Insights",
+                cust_repeat_rate: "Repeat Rate",
+                cust_top_list: "🏆 Loyal Customer List",
+                cust_new: "New",
+                cust_returning: "Returning",
                 btn_7d: "7 Days",
                 btn_30d: "30 Days",
                 btn_90d: "90 Days",
@@ -895,6 +935,11 @@
                 kpi_pax_label: "Pasajeros Totales",
                 kpi_avg_label: "Tamaño Medio Grupo",
                 kpi_peak_label: "Día Más Concurrido",
+                stats_customers: "Análisis de Clientes",
+                cust_repeat_rate: "Tasa de Repetición",
+                cust_top_list: "🏆 Lista de Clientes Leales",
+                cust_new: "Nuevos",
+                cust_returning: "Recurrentes",
                 btn_7d: "7 Días",
                 btn_30d: "30 Días",
                 btn_90d: "90 Días",
@@ -1623,6 +1668,32 @@
                     document.getElementById('kpi_pax').innerText = data.kpi.total_pax;
                     document.getElementById('kpi_avg').innerText = data.kpi.avg_pax;
                     document.getElementById('kpi_peak').innerText = data.kpi.busiest_day;
+                    
+                    // Trends
+                    function renderTrend(id, val) {
+                        const el = document.getElementById(id);
+                        if (!el) return;
+                        if (val === undefined || val === null) {
+                            el.innerHTML = '';
+                            return;
+                        }
+                        
+                        let color = '#6B7280'; // gray
+                        let icon = '•';
+                        if (val > 0) {
+                            color = '#10B981'; // green
+                            icon = '↑';
+                        } else if (val < 0) {
+                            color = '#EF4444'; // red
+                            icon = '↓';
+                        }
+                        
+                        el.innerHTML = `<span style="color:${color}">${icon} ${Math.abs(val)}%</span>`;
+                    }
+                    
+                    renderTrend('kpi_searches_trend', data.kpi.trend_searches);
+                    renderTrend('kpi_pax_trend', data.kpi.trend_pax);
+                    renderTrend('kpi_avg_trend', data.kpi.trend_avg);
                 }
                 
                 // Get translations
@@ -1752,6 +1823,63 @@
                             plugins: { legend: { display: false } }
                         }
                     });
+                }
+
+                // 5. Customer Analysis
+                if (data.customers) {
+                    const cust = data.customers;
+                    
+                    // Update KPI
+                    const rate = cust.repeat_rate !== undefined ? cust.repeat_rate : 0;
+                    document.getElementById('cust_rate').innerText = rate + '%';
+                    
+                    const ret = cust.returning_customers || 0;
+                    const tot = cust.unique_customers || 0;
+                    const newC = cust.new_customers || 0;
+                    
+                    document.getElementById('cust_counts').innerText = 
+                        `${ret} ${t.cust_returning || 'Returning'} / ${tot} Total`;
+                    
+                    // Pie Chart
+                    const ctxCust = document.getElementById('customerChart').getContext('2d');
+                    if (window.customerChartInstance) window.customerChartInstance.destroy();
+                    
+                    // Handle empty data case for chart
+                    const chartData = (tot === 0) ? [1] : [newC, ret];
+                    const chartColors = (tot === 0) ? ['#E5E7EB'] : ['#3B82F6', '#10B981'];
+                    const chartLabels = (tot === 0) ? ['No Data'] : [t.cust_new || 'New', t.cust_returning || 'Returning'];
+
+                    window.customerChartInstance = new Chart(ctxCust, {
+                        type: 'pie',
+                        data: {
+                            labels: chartLabels,
+                            datasets: [{
+                                data: chartData,
+                                backgroundColor: chartColors,
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'right', labels: { boxWidth: 10, font: {size: 11} } }
+                            }
+                        }
+                    });
+                    
+                    // Top List
+                    const topListEl = document.getElementById('top_customers_list');
+                    if (cust.top_customers && cust.top_customers.length > 0) {
+                        topListEl.innerHTML = cust.top_customers.map((c, i) => `
+                            <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:4px;">
+                                <span>${i+1}. ${c.name}</span>
+                                <span style="font-weight:600; color:#4B5563;">${c.count}</span>
+                            </div>
+                        `).join('');
+                    } else {
+                        topListEl.innerHTML = '<div style="color:#9CA3AF; text-align:center;">No data</div>';
+                    }
                 }
 
             } catch (e) {
