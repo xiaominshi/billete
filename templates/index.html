@@ -8,6 +8,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <!-- html2canvas -->
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root {
             --primary: #4F46E5;
@@ -21,6 +24,15 @@
             --radius: 12px;
         }
 
+        [data-theme="dark"] {
+            --bg: #111827;
+            --card-bg: #1F2937;
+            --text-main: #F9FAFB;
+            --text-muted: #9CA3AF;
+            --border: #374151;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background-color: var(--bg);
@@ -28,6 +40,50 @@
             margin: 0;
             padding: 20px;
             line-height: 1.5;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Dark mode overrides for specific elements */
+        [data-theme="dark"] .btn-secondary {
+            background-color: #374151;
+            color: #F3F4F6;
+        }
+        [data-theme="dark"] .btn-secondary:hover {
+            background-color: #4B5563;
+        }
+        [data-theme="dark"] .list-item {
+            background-color: #1F2937;
+            border-bottom-color: #374151;
+        }
+        [data-theme="dark"] .list-item:hover {
+            background-color: #374151;
+        }
+        [data-theme="dark"] .result-box {
+            background-color: #111827;
+            border-color: #374151;
+            color: #E5E7EB;
+        }
+        [data-theme="dark"] input, 
+        [data-theme="dark"] textarea, 
+        [data-theme="dark"] select {
+            background-color: #111827;
+            color: #F9FAFB;
+            border-color: #374151;
+        }
+        [data-theme="dark"] .details-box {
+            background-color: #111827;
+            border-top-color: #374151;
+        }
+        [data-theme="dark"] .modal-content {
+            background-color: #1F2937;
+            border-color: #374151;
+        }
+        [data-theme="dark"] .label-group {
+            background-color: #111827;
+            border-color: #374151;
+        }
+        [data-theme="dark"] .input-row {
+            background-color: #374151 !important; /* Override inline style if needed, or better use class */
         }
 
         .container {
@@ -181,6 +237,52 @@
             background-color: #F9FAFB;
         }
 
+        /* Modal Style */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 25px;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 800px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            animation: modalFadeIn 0.3s;
+        }
+
+        @keyframes modalFadeIn {
+            from {opacity: 0; transform: translateY(-20px);}
+            to {opacity: 1; transform: translateY(0);}
+        }
+
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .close-modal:hover,
+        .close-modal:focus {
+            color: #000;
+            text-decoration: none;
+        }
+
         /* Toast Notification */
         #toast {
             visibility: hidden;
@@ -208,6 +310,25 @@
         }
 
         /* Helper Utilities */
+        .btn-range {
+            background: none;
+            border: none;
+            padding: 4px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            color: #6B7280;
+            font-weight: 500;
+        }
+        .btn-range.active {
+            background: white;
+            color: #4F46E5;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .btn-range:hover:not(.active) {
+            background: rgba(255,255,255,0.5);
+        }
+
         .label-group {
             display: flex;
             align-items: center;
@@ -334,20 +455,102 @@
 
 <body>
     <div class="container">
-        <h1>✈️ LULI Web Service ✈️</h1>
-        <div style="text-align:center; color: #6B7280; margin-top: -20px; margin-bottom: 20px; font-size: 14px;">
-            今日搜索次数 (Today's Searches): <span id="today-count" style="font-weight:bold; color: #4F46E5;">0</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="width: 100px;"></div> <!-- Spacer for center alignment -->
+            <h1 style="margin: 0;">✈️ LULI Web Service ✈️</h1>
+            <div style="width: 100px; text-align: right;">
+                <select id="langSelect" onchange="switchLanguage(this.value)" style="padding: 5px; border-radius: 6px; border: 1px solid #ccc;">
+                    <option value="zh">🇨🇳 中文</option>
+                    <option value="en">🇺🇸 English</option>
+                    <option value="es">🇪🇸 Español</option>
+                </select>
+            </div>
+        </div>
+        
+        <div style="text-align:center; color: #6B7280; margin-top: -10px; margin-bottom: 20px; font-size: 14px; display: flex; justify-content: center; align-items: center; gap: 15px;">
+            <span><span data-i18n="today_search">今日搜索次数</span>: <span id="today-count" style="font-weight:bold; color: #4F46E5;">0</span></span>
+            <button class="btn btn-small btn-secondary" style="width: auto; padding: 4px 10px;" onclick="showStats()" data-i18n="stats_btn">📊 统计</button>
+        </div>
+
+        <!-- Stats Modal -->
+        <div id="statsModal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal" onclick="closeStats()">&times;</span>
+                <h3 style="margin-top:0; border-bottom:none; margin-bottom:20px;" data-i18n="stats_title">📊 统计数据 (Statistics)</h3>
+                
+                <!-- KPI Cards -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px;">
+                    <div style="background:#EEF2FF; padding:15px; border-radius:8px; text-align:center;">
+                        <div style="font-size:12px; color:#6B7280; font-weight:600;" data-i18n="kpi_searches_label">Total Searches</div>
+                        <div id="kpi_searches" style="font-size:24px; font-weight:700; color:#4F46E5;">0</div>
+                    </div>
+                    <div style="background:#ECFDF5; padding:15px; border-radius:8px; text-align:center;">
+                        <div style="font-size:12px; color:#6B7280; font-weight:600;" data-i18n="kpi_pax_label">Total Pax</div>
+                        <div id="kpi_pax" style="font-size:24px; font-weight:700; color:#10B981;">0</div>
+                    </div>
+                    <div style="background:#FFF7ED; padding:15px; border-radius:8px; text-align:center;">
+                        <div style="font-size:12px; color:#6B7280; font-weight:600;" data-i18n="kpi_avg_label">Avg Group Size</div>
+                        <div id="kpi_avg" style="font-size:24px; font-weight:700; color:#F59E0B;">0</div>
+                    </div>
+                    <div style="background:#F3F4F6; padding:15px; border-radius:8px; text-align:center;">
+                        <div style="font-size:12px; color:#6B7280; font-weight:600;" data-i18n="kpi_peak_label">Busiest Day</div>
+                        <div id="kpi_peak" style="font-size:16px; font-weight:700; color:#374151; margin-top:5px;">N/A</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px; display:flex; gap:15px; justify-content:space-between; align-items:center;">
+                    <div style="text-align:left; display:flex; gap:10px; align-items:center;">
+                        <h4 style="margin:0; color:#4B5563;" data-i18n="stats_trend">趋势 (Trends)</h4>
+                        <div style="display:flex; background:#E5E7EB; border-radius:6px; padding:2px;">
+                            <button class="btn-range active" onclick="setStatsRange(7)" id="btn-range-7" data-i18n="btn_7d">7 Days</button>
+                            <button class="btn-range" onclick="setStatsRange(30)" id="btn-range-30" data-i18n="btn_30d">30 Days</button>
+                            <button class="btn-range" onclick="setStatsRange(90)" id="btn-range-90" data-i18n="btn_90d">90 Days</button>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-small btn-secondary" onclick="exportHistoryToCSV()" style="width:auto; font-size:12px;" data-i18n="btn_export_csv">📥 导出 (CSV)</button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 30px;">
+                    <div style="height: 250px;">
+                        <canvas id="dailyChart"></canvas>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 9fr 1fr; gap: 20px;">
+                    <div>
+                        <h4 style="margin:0 0 10px 0; color:#4B5563;" data-i18n="stats_top">热门航线 (Top Routes)</h4>
+                        <div style="height:250px;">
+                            <canvas id="routeChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                         <h4 style="margin:0 0 10px 0; color:#4B5563;" data-i18n="stats_airlines">航空公司 (Airlines)</h4>
+                         <div style="height:250px; display:flex; justify-content:center;">
+                            <canvas id="airlineChart"></canvas>
+                         </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top:20px;">
+                    <h4 style="margin:0 0 10px 0; color:#4B5563;" data-i18n="stats_hourly">活跃时段 (Hourly Activity)</h4>
+                    <div style="height: 150px;">
+                        <canvas id="hourlyChart"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Card 1: Translator -->
         <div class="card">
-            <h3>翻译 (Translator)</h3>
+            <h3 data-i18n="translator_title">翻译</h3>
             <form id="processForm">
                 <div style="margin-bottom: 20px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <label style="font-weight: 500;">请输入代码 (Input Code):</label>
-                        <button type="button" class="btn btn-small btn-secondary" style="width:auto; padding:4px 8px; font-size:12px;" onclick="smartPaste()">
-                            📋 粘贴 (Paste)
+                        <label style="font-weight: 500;" data-i18n="input_code">请输入代码:</label>
+                        <button type="button" class="btn btn-small btn-secondary" style="width:auto; padding:4px 8px; font-size:12px;" onclick="smartPaste()" data-i18n="paste_btn">
+                            📋 粘贴
                         </button>
                     </div>
                     <textarea id="code" name="code" placeholder="Paste flight code here..."></textarea>
@@ -355,27 +558,27 @@
 
                 <div class="input-row" style="background: #F3F4F6; padding: 15px; border-radius: 8px;">
                     <div class="label-group">
-                        <span>👜 手提:</span>
+                        <span data-i18n="hand_luggage">👜 手提:</span>
                         <input type="number" id="hand_count" value="1"
                             style="width: 50px; border:none; background:transparent; font-weight:bold; text-align:center;">
-                        件
+                        <span data-i18n="unit_piece">件</span>
                         <input type="number" id="hand_weight" value="8"
                             style="width: 50px; border:none; background:transparent; font-weight:bold; text-align:center;">
                         kg
                     </div>
                     <div style="color:var(--text-muted);">|</div>
                     <div class="label-group">
-                        <span>🧳 托运:</span>
+                        <span data-i18n="checked_luggage">🧳 托运:</span>
                         <input type="number" id="pack_count" value="2"
                             style="width: 50px; border:none; background:transparent; font-weight:bold; text-align:center;">
-                        件
+                        <span data-i18n="unit_piece">件</span>
                         <input type="number" id="pack_weight" value="23"
                             style="width: 50px; border:none; background:transparent; font-weight:bold; text-align:center;">
                         kg
                     </div>
                 </div>
 
-                <button type="button" class="btn" onclick="processData()">🚀 开始翻译 (Process)</button>
+                <button type="button" class="btn" onclick="processData()" data-i18n="process_btn">🚀 开始翻译</button>
             </form>
 
             <!-- Hidden Visual Card Container for HTML2Canvas -->
@@ -384,7 +587,7 @@
                     <!-- Header -->
                     <div class="vc-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div>
-                            <div style="font-size: 24px; font-weight: 700;">✈ 行程确认单</div>
+                            <div style="font-size: 24px; font-weight: 700;" id="vc-title-text">✈ 行程确认单</div>
                             <div style="font-size: 14px; opacity: 0.9;">Flight Itinerary</div>
                         </div>
                         <div style="display: flex; gap: 15px; align-items: center;">
@@ -406,7 +609,7 @@
                         <!-- Left: Passengers -->
                         <div class="vc-card">
                             <div class="vc-section-title">
-                                <span>👥</span> 乘客信息 / Passenger Details
+                                <span>👥</span> <span id="vc-pax-title-text">乘客信息 / Passenger Details</span>
                             </div>
                             <div id="vc-pax-list">
                                 <!-- Populated by JS -->
@@ -427,7 +630,7 @@
 
                     <!-- Footer -->
                     <div
-                        style="text-align:center; padding:15px; color:#9CA3AF; font-size:12px; border-top:1px dashed #E5E7EB;">
+                        style="text-align:center; padding:15px; color:#9CA3AF; font-size:12px; border-top:1px dashed #E5E7EB;" id="vc-footer-text">
                         祝您旅途愉快 Have a pleasant journey! &nbsp;|&nbsp; Generated by Billete
                     </div>
                 </div>
@@ -468,13 +671,17 @@
                         style="background-color: #3B82F6; width:auto; display: flex; align-items: center; gap: 5px;">
                         <span>📅</span> Calendar
                     </button>
+                    <button id="pdfBtn" onclick="downloadPDF()" class="btn btn-secondary"
+                        style="background-color: #EF4444; width:auto; display: flex; align-items: center; gap: 5px;">
+                        <span>📄</span> PDF
+                    </button>
                     <button id="generateImageBtn" onclick="generateImage()" class="btn btn-secondary"
-                        style="background-color: #10B981; width:auto; display: flex; align-items: center; gap: 5px;">
-                        <span>📸</span> 生成航班卡片
+                        style="background-color: #10B981; width:auto; display: flex; align-items: center; gap: 5px;" data-i18n="img_btn">
+                        <span>📸</span> 生成图片
                     </button>
                     <button id="copyBtn" class="btn btn-copy"
                         style="margin-top:0; width:auto; display: flex; align-items: center; gap: 5px;"
-                        onclick="copyResult()">
+                        onclick="copyResult()" data-i18n="copy_btn">
                         <span>📋</span> 复制文本
                     </button>
                 </div>
@@ -485,11 +692,11 @@
         <div class="card">
             <div
                 style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom: 2px solid var(--border); padding-bottom: 10px;">
-                <h3 style="margin:0; border:none;">📜 历史记录 (History)</h3>
+                <h3 style="margin:0; border:none;" data-i18n="history_title">📜 历史记录</h3>
                 <div style="display:flex; gap:10px;">
                     <button class="btn btn-small btn-secondary" style="background-color:#EF4444;"
-                        onclick="clearHistory()">🗑️ 清空 (Clear)</button>
-                    <button class="btn btn-small btn-secondary" onclick="loadHistory()">🔄 刷新 (Refresh)</button>
+                        onclick="clearHistory()" data-i18n="clear_btn">🗑️ 清空</button>
+                    <button class="btn btn-small btn-secondary" onclick="loadHistory()" data-i18n="refresh_btn">🔄 刷新</button>
                 </div>
             </div>
             <div id="history_list" class="list-container">
@@ -500,18 +707,18 @@
 
         <!-- Card 3: Airport Management -->
         <div class="card">
-            <h3>🌍 机场代码管理 (Manage Airports)</h3>
+            <h3 data-i18n="airport_title">🌍 机场代码管理</h3>
 
             <!-- Add/Edit Form -->
             <div class="input-row" style="background-color: var(--bg); padding: 15px; border-radius: 8px;">
                 <input type="text" id="edit_code" placeholder="Code (e.g. MAD)"
                     style="width: 100px; text-transform: uppercase; font-weight:bold;">
                 <input type="text" id="edit_name" placeholder="Name (e.g. 马德里)" style="flex-grow: 1;">
-                <button class="btn btn-small" onclick="saveAirport()" style="width: auto;">💾 保存 (Save)</button>
+                <button class="btn btn-small" onclick="saveAirport()" style="width: auto;" data-i18n="save_btn">💾 保存</button>
                 <input type="file" id="airport_file" accept=".txt" style="display:none" />
                 <div style="display:flex; gap:8px;">
-                    <button class="btn btn-small btn-secondary" onclick="triggerImportAirports()" style="width:auto;">📥 批量导入 (Import .txt)</button>
-                    <button class="btn btn-small btn-secondary" onclick="exportAirports()" style="width:auto;">📤 批量导出 (Export .txt)</button>
+                    <button class="btn btn-small btn-secondary" onclick="triggerImportAirports()" style="width:auto;" data-i18n="import_btn">📥 批量导入 (.txt)</button>
+                    <button class="btn btn-small btn-secondary" onclick="exportAirports()" style="width:auto;" data-i18n="export_btn">📤 批量导出 (.txt)</button>
                 </div>
             </div>
 
@@ -530,6 +737,317 @@
     <div id="toast">Some message..</div>
 
     <script>
+        // --- i18n Logic ---
+        const translations = {
+            zh: {
+                today_search: "今日搜索次数",
+                stats_btn: "📊 统计",
+                translator_title: "翻译",
+                input_code: "请输入代码:",
+                paste_btn: "📋 粘贴",
+                hand_luggage: "👜 手提:",
+                checked_luggage: "🧳 托运:",
+                unit_piece: "件",
+                process_btn: "🚀 开始翻译",
+                img_btn: "📸 生成图片",
+                copy_btn: "📋 复制文本",
+                history_title: "📜 历史记录",
+                clear_btn: "🗑️ 清空",
+                refresh_btn: "🔄 刷新",
+                airport_title: "🌍 机场代码管理",
+                save_btn: "💾 保存",
+                import_btn: "📥 批量导入 (.txt)",
+                export_btn: "📤 批量导出 (.txt)",
+                stats_title: "📊 统计数据",
+                stats_trend: "趋势",
+                stats_top: "热门航线",
+                stats_airlines: "航空公司",
+                stats_hourly: "活跃时段",
+                kpi_searches_label: "总搜索",
+                kpi_pax_label: "总乘客",
+                kpi_avg_label: "平均人数",
+                kpi_peak_label: "最忙碌日",
+                btn_7d: "7天",
+                btn_30d: "30天",
+                btn_90d: "90天",
+                btn_export_csv: "📥 导出 (CSV)",
+                chart_searches: "搜索量",
+                chart_activity: "活跃度",
+                chart_flights: "航班量",
+                toast_copy_img: "图片已复制到剪贴板!",
+                toast_download_img: "图片已下载 (复制失败)",
+                toast_process_first: "请先处理航班代码!",
+                toast_gen_error: "生成图片失败",
+                toast_pasted: "已从剪贴板粘贴!",
+                toast_empty: "剪贴板为空",
+                toast_processed: "翻译完成并已自动复制! 📋",
+                toast_copy_text: "结果已复制到剪贴板!",
+                ph_code: "在此粘贴航班代码...",
+                ph_search: "🔍 搜索机场...",
+
+                // Text Result
+                txt_pax: "乘客",
+                txt_return: "---------<回程>---------",
+                txt_layover: "转机时间: {h}小时{m}分",
+                txt_date: "【{y}年{m}月{d}日】",
+                
+                // Visual Card
+                vc_title: "行程确认单",
+                vc_pax_title: "乘客信息 / Passenger Details",
+                vc_wishes: "祝您旅途愉快 Have a pleasant journey!",
+                vc_generated: "Generated by Billete",
+                vc_pax_prefix: "乘客",
+                vc_return: "回程 / Return Trip",
+                vc_layover: "转机时间",
+                vc_outbound: "去程 / Outbound",
+                vc_luggage_title: "行李额度 / Luggage Allowance",
+                vc_eco_round: "经济舱往返"
+            },
+            en: {
+                today_search: "Today's Searches",
+                stats_btn: "📊 Stats",
+                translator_title: "Translator",
+                input_code: "Input Code:",
+                paste_btn: "📋 Paste",
+                hand_luggage: "👜 Hand:",
+                checked_luggage: "🧳 Checked:",
+                unit_piece: "pcs",
+                process_btn: "🚀 Process",
+                img_btn: "📸 Gen Image",
+                copy_btn: "📋 Copy Text",
+                history_title: "📜 History",
+                clear_btn: "🗑️ Clear",
+                refresh_btn: "🔄 Refresh",
+                airport_title: "🌍 Airport Management",
+                save_btn: "💾 Save",
+                import_btn: "📥 Import (.txt)",
+                export_btn: "📤 Export (.txt)",
+                stats_title: "📊 Statistics",
+                stats_trend: "Trends",
+                stats_top: "Top Routes",
+                stats_airlines: "Airlines",
+                stats_hourly: "Hourly Activity",
+                kpi_searches_label: "Total Searches",
+                kpi_pax_label: "Total Pax",
+                kpi_avg_label: "Avg Group Size",
+                kpi_peak_label: "Busiest Day",
+                btn_7d: "7 Days",
+                btn_30d: "30 Days",
+                btn_90d: "90 Days",
+                btn_export_csv: "📥 Export (CSV)",
+                chart_searches: "Searches",
+                chart_activity: "Activity",
+                chart_flights: "Flights",
+                toast_copy_img: "Image copied to clipboard!",
+                toast_download_img: "Image downloaded (Copy failed)",
+                toast_process_first: "Please process flight code first!",
+                toast_gen_error: "Failed to generate image",
+                toast_pasted: "Pasted from clipboard!",
+                toast_empty: "Clipboard is empty",
+                toast_processed: "Processed & Auto-Copied! 📋",
+                toast_copy_text: "Result copied to clipboard!",
+                ph_code: "Paste flight code here...",
+                ph_search: "🔍 Search airports...",
+                
+                // Text Result
+                txt_pax: "Passenger",
+                txt_return: "---------<Return Trip>---------",
+                txt_layover: "Transfer time: {h}h {m}m",
+                txt_date: "【{y}-{m}-{d}】",
+                
+                // Visual Card
+                vc_title: "Flight Itinerary",
+                vc_pax_title: "Passenger Details",
+                vc_wishes: "Have a pleasant journey!",
+                vc_generated: "Generated by Billete",
+                vc_pax_prefix: "Passenger",
+                vc_return: "Return Trip",
+                vc_layover: "Transfer time",
+                vc_outbound: "Outbound",
+                vc_luggage_title: "Luggage Allowance",
+                vc_eco_round: "Economy Round Trip"
+            },
+            es: {
+                today_search: "Búsquedas de hoy",
+                stats_btn: "📊 Estadísticas",
+                translator_title: "Traductor",
+                input_code: "Código:",
+                paste_btn: "📋 Pegar",
+                hand_luggage: "👜 Mano:",
+                checked_luggage: "🧳 Facturado:",
+                unit_piece: "pza",
+                process_btn: "🚀 Procesar",
+                img_btn: "📸 Imagen",
+                copy_btn: "📋 Copiar",
+                history_title: "📜 Historial",
+                clear_btn: "🗑️ Borrar",
+                refresh_btn: "🔄 Actualizar",
+                airport_title: "🌍 Gestión de Aeropuertos",
+                save_btn: "💾 Guardar",
+                import_btn: "📥 Importar (.txt)",
+                export_btn: "📤 Exportar (.txt)",
+                stats_title: "📊 Estadísticas",
+                stats_trend: "Tendencias",
+                stats_top: "Rutas Populares",
+                stats_airlines: "Aerolíneas",
+                stats_hourly: "Actividad por Hora",
+                kpi_searches_label: "Búsquedas Totales",
+                kpi_pax_label: "Pasajeros Totales",
+                kpi_avg_label: "Tamaño Medio Grupo",
+                kpi_peak_label: "Día Más Concurrido",
+                btn_7d: "7 Días",
+                btn_30d: "30 Días",
+                btn_90d: "90 Días",
+                btn_export_csv: "📥 Exportar (CSV)",
+                chart_searches: "Búsquedas",
+                chart_activity: "Actividad",
+                chart_flights: "Vuelos",
+                toast_copy_img: "¡Imagen copiada!",
+                toast_download_img: "Imagen descargada",
+                toast_process_first: "¡Procese el código primero!",
+                toast_gen_error: "Error al generar imagen",
+                toast_pasted: "¡Pegado!",
+                toast_empty: "Portapapeles vacío",
+                toast_processed: "¡Procesado y copiado! 📋",
+                toast_copy_text: "¡Copiado!",
+                ph_code: "Pegue el código aquí...",
+                ph_search: "🔍 Buscar aeropuertos...",
+
+                // Text Result
+                txt_pax: "Pasajero",
+                txt_return: "---------<Vuelta>---------",
+                txt_layover: "Escala en {p}: {h}h {m}m",
+                txt_date: "【{d}/{m}/{y}】",
+                
+                // Visual Card
+                vc_title: "Itinerario de Vuelo",
+                vc_pax_title: "Detalles del Pasajero",
+                vc_wishes: "¡Buen viaje!",
+                vc_generated: "Generated by Billete",
+                vc_pax_prefix: "Pasajero",
+                vc_return: "Vuelta",
+                vc_layover: "Tiempo de escala",
+                vc_outbound: "Ida",
+                vc_luggage_title: "Equipaje",
+                vc_eco_round: "Económica Ida y Vuelta"
+            }
+        };
+
+        function switchLanguage(lang) {
+            localStorage.setItem('billete_lang', lang);
+            document.documentElement.lang = lang;
+            
+            const t = translations[lang];
+            if (!t) return;
+
+            // Update Text
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) el.innerText = t[key];
+            });
+
+            // Update Placeholders
+            const codeInput = document.getElementById('code');
+            if (codeInput && t.ph_code) codeInput.placeholder = t.ph_code;
+            
+            const searchInput = document.getElementById('search_box');
+            if (searchInput && t.ph_search) searchInput.placeholder = t.ph_search;
+
+            // Update Select value
+            const sel = document.getElementById('langSelect');
+            if (sel) sel.value = lang;
+
+            // Update Visual Card Text
+            const vcTitle = document.getElementById('vc-title-text');
+            if (vcTitle && t.vc_title) vcTitle.innerText = t.vc_title;
+
+            const vcPaxTitle = document.getElementById('vc-pax-title-text');
+            if (vcPaxTitle && t.vc_pax_title) vcPaxTitle.innerText = t.vc_pax_title;
+
+            const vcFooter = document.getElementById('vc-footer-text');
+            if (vcFooter && t.vc_wishes && t.vc_generated) {
+                vcFooter.innerHTML = `${t.vc_wishes} &nbsp;|&nbsp; ${t.vc_generated}`;
+            }
+
+            // Re-render visual card if data exists
+            if (lastProcessedData) {
+                renderVisualCard(lastProcessedData);
+                // Also update text result
+                const newText = generateResultText(lastProcessedData);
+                document.getElementById('result').textContent = newText;
+            }
+
+            // Update Stats if open
+            if (document.getElementById('statsModal').style.display === 'block') {
+                loadDetailedStats(currentStatsRange);
+            }
+        }
+
+        // --- PDF Logic ---
+        function downloadPDF() {
+            const { jsPDF } = window.jspdf;
+            const element = document.getElementById('visualCard');
+            
+            if (!element.innerText.trim()) {
+                showToast("Please process flight code first!", true);
+                return;
+            }
+            
+            const btn = document.getElementById('pdfBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ Saving...';
+
+            html2canvas(element, {
+                scale: 2, // High quality
+                useCORS: true
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                
+                // A4 dimensions in mm: 210 x 297
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 10;
+                
+                // Calculate dimensions
+                const imgProps = pdf.getImageProperties(imgData);
+                const pdfWidth = pageWidth - (margin * 2);
+                let pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                
+                // Auto-scale to fit single page if it slightly exceeds (e.g., up to 1.3x page height)
+                // Otherwise, it would cut off or require multi-page logic (which is complex for images)
+                // Since this is an itinerary, fitting on one page is usually preferred.
+                const maxPageHeight = pageHeight - (margin * 2);
+                
+                if (pdfHeight > maxPageHeight) {
+                    // Calculate scale factor to fit height
+                    const scaleFactor = maxPageHeight / pdfHeight;
+                    // Only scale if it's not TOO long (avoid making text unreadable)
+                    // If it's huge (e.g. 2 pages worth), we might just let it crop or implement multi-page later.
+                    // But for 4 flights, it's likely just a bit over.
+                    
+                    const scaledWidth = pdfWidth * scaleFactor;
+                    const scaledHeight = maxPageHeight;
+                    
+                    // Center horizontally
+                    const x = (pageWidth - scaledWidth) / 2;
+                    pdf.addImage(imgData, 'PNG', x, margin, scaledWidth, scaledHeight);
+                } else {
+                    // Fits normally
+                    pdf.addImage(imgData, 'PNG', margin, margin, pdfWidth, pdfHeight);
+                }
+
+                pdf.save("Flight_Itinerary.pdf");
+                
+                showToast("PDF Downloaded!");
+                btn.innerHTML = originalText;
+            }).catch(err => {
+                console.error(err);
+                showToast("PDF Generation Failed", true);
+                btn.innerHTML = originalText;
+            });
+        }
+
         // Image Generation Logic
         async function copyImage(blob) {
             try {
@@ -581,11 +1099,62 @@
             });
         }
 
+        function generateResultText(data) {
+            const lang = document.documentElement.lang || 'zh';
+            const t = translations[lang] || translations['zh'];
+            
+            let res = "";
+            
+            // Passengers
+            data.passengers.forEach((p, idx) => {
+                res += `${t.txt_pax || 'Passenger'}${idx + 1}: ${p}\n`;
+            });
+
+            // Flights
+            const layovers = data.layovers || [];
+            
+            data.flights.forEach((f, idx) => {
+                // Return trip marker
+                const layover = layovers.find(l => l.flight_index === idx);
+                if (layover && layover.type === 'return_split') {
+                    res += `${t.txt_return || '---------<Return Trip>---------'}\n`;
+                }
+                
+                // Date Line
+                if (idx === 0 || (f.is_return || (layover && layover.type === 'return_split'))) {
+                    let dateStr = t.txt_date || "【{y}-{m}-{d}】";
+                    dateStr = dateStr.replace('{y}', f.year)
+                                     .replace('{m}', f.month)
+                                     .replace('{d}', f.day);
+                    res += `${dateStr}\n`;
+                }
+                
+                // Flight Line
+                res += `${f.origin}-${f.dest}-->${f.start}-${f.end}`;
+                if (f.next_day) res += "+1";
+                res += "\n";
+
+                // Layover Line
+                if (layover && layover.type === 'layover' && layover.hours >= 0) {
+                    let layStr = t.txt_layover || "Layover at {p}: {h}h {m}m";
+                    layStr = layStr.replace('{p}', layover.place)
+                                   .replace('{h}', layover.hours)
+                                   .replace('{m}', layover.minutes);
+                    res += `${layStr}\n`;
+                }
+            });
+            
+            return res;
+        }
+
         function renderVisualCard(data) {
+            const lang = document.documentElement.lang || 'zh';
+            const t = translations[lang] || translations['zh'];
+
             // Passengers
             let paxHtml = '';
             data.passengers.forEach((p, idx) => {
-                paxHtml += `<div class="vc-pax-item">乘客 ${idx + 1}: ${p}</div>`;
+                paxHtml += `<div class="vc-pax-item">${t.vc_pax_prefix} ${idx + 1}: ${p}</div>`;
             });
             document.getElementById('vc-pax-list').innerHTML = paxHtml;
 
@@ -600,21 +1169,21 @@
                     if (layover.type === 'return_split') {
                         flightsHtml += `
                          <div style="margin: 20px 0; padding:10px; background:#EEF2FF; border-radius:8px; display:flex; gap:10px; align-items:center;">
-                            <div style="font-weight:700; color:#4F46E5;">回程 Return Trip</div>
+                            <div style="font-weight:700; color:#4F46E5;">${t.vc_return}</div>
                          </div>
                          `;
                     } else if (layover.type === 'layover') {
                         flightsHtml += `
                          <div style="margin: 10px 0 20px; padding-left:20px; font-size:13px; color:#6B7280; display:flex; align-items:center; gap:5px;">
                             <span>⏳</span>
-                            <span>停留 ${layover.place}: ${layover.hours}h ${layover.minutes}m</span>
+                            <span>${t.vc_layover}: ${layover.hours}h ${layover.minutes}m</span>
                          </div>
                          `;
                     }
                 } else if (idx === 0) {
                     flightsHtml += `
                      <div style="margin: 0 0 20px; padding:10px; background:#EEF2FF; border-radius:8px; display:flex; gap:10px; align-items:center;">
-                        <div style="font-weight:700; color:#4F46E5;">启程 Outbound</div>
+                        <div style="font-weight:700; color:#4F46E5;">${t.vc_outbound}</div>
                      </div>`;
                 }
 
@@ -660,25 +1229,15 @@
             document.getElementById('vc-flight-list').innerHTML = flightsHtml;
 
             // Luggage
-            // Luggage
-            // Title for Luggage
-            flightsHtml += ``;
-            // Wait, we are modifying innerHTML of vc-luggage, but we want the title OUTSIDE the flexbox if we want it like the others?
-            // User asked: "行李额度也加像回程这样的title" (Add title like Return trip).
-            // Return trip title is full width. "vc-luggage" is a flex container currently?
-            // Let's check CSS for .vc-luggage: display: flex; justify-content: space-between;
-            // So we cannot put the full width title INSIDE .vc-luggage directly if we want it to span top.
-            // Or we change the content of .vc-luggage to be block, and have the flex part inside.
-
             const lug = data.luggage;
             document.getElementById('vc-luggage').innerHTML = `
                 <div style="margin: 0 0 15px; padding:10px; background:#EEF2FF; border-radius:8px; display:flex; gap:10px; align-items:center; width:100%;">
-                    <div style="font-weight:700; color:#4F46E5;">行李额度 Baggage Allowance</div>
+                    <div style="font-weight:700; color:#4F46E5;">${t.vc_luggage_title}</div>
                 </div>
                 
                 <div style="display:flex; justify-content: space-between; align-items: center; width:100%;">
                     <div>
-                         <div style="font-weight:600; font-size:14px; margin-bottom:5px;">经济舱往返</div>
+                         <div style="font-weight:600; font-size:14px; margin-bottom:5px;">${t.vc_eco_round}</div>
                          <div style="font-size:12px; color:#6B7280;">
                             Economy Round Trip
                          </div>
@@ -708,6 +1267,11 @@
             loadAirports();
             loadHistory();
             loadStats();
+            
+            // Restore Language
+            const savedLang = localStorage.getItem('billete_lang') || 'zh';
+            switchLanguage(savedLang);
+
             try {
                 if (!document.getElementById('airport_file')) {
                     const headers = Array.from(document.querySelectorAll('.card h3'));
@@ -1012,6 +1576,192 @@
             }
         }
 
+        let myChart = null;
+        let airlineChart = null;
+        let hourlyChart = null;
+        let routeChart = null;
+        let currentStatsRange = 7;
+
+        function showStats() {
+            document.getElementById('statsModal').style.display = 'block';
+            loadDetailedStats(currentStatsRange);
+        }
+        
+        function setStatsRange(days) {
+            currentStatsRange = days;
+            // Update UI
+            document.querySelectorAll('.btn-range').forEach(b => b.classList.remove('active'));
+            document.getElementById(`btn-range-${days}`).classList.add('active');
+            // Reload
+            loadDetailedStats(days);
+        }
+
+        function closeStats() {
+            document.getElementById('statsModal').style.display = 'none';
+        }
+        
+        function exportHistoryToCSV() {
+            window.location.href = '/history/export';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('statsModal');
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+
+        async function loadDetailedStats(days=7) {
+            try {
+                const response = await fetch(`/stats/detailed?days=${days}`);
+                const data = await response.json();
+                
+                // Update KPI Cards
+                if (data.kpi) {
+                    document.getElementById('kpi_searches').innerText = data.kpi.total_searches;
+                    document.getElementById('kpi_pax').innerText = data.kpi.total_pax;
+                    document.getElementById('kpi_avg').innerText = data.kpi.avg_pax;
+                    document.getElementById('kpi_peak').innerText = data.kpi.busiest_day;
+                }
+                
+                // Get translations
+                const lang = document.documentElement.lang || 'zh';
+                const t = translations[lang] || translations['zh'];
+
+                // 1. Daily Chart (Bar)
+                const ctx = document.getElementById('dailyChart').getContext('2d');
+                if (myChart) myChart.destroy();
+                myChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.daily.map(d => d.date.substring(5)), // Show MM-DD
+                        datasets: [{
+                            label: t.chart_searches || 'Searches',
+                            data: data.daily.map(d => d.count),
+                            backgroundColor: 'rgba(79, 70, 229, 0.6)',
+                            borderColor: 'rgba(79, 70, 229, 1)',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+
+                // 2. Airline Chart (Pie)
+                if (data.airlines) {
+                    const ctx2 = document.getElementById('airlineChart').getContext('2d');
+                    if (airlineChart) airlineChart.destroy();
+                    
+                    // Generate random colors
+                    const colors = [
+                        '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#6366F1', 
+                        '#8B5CF6', '#EC4899', '#9CA3AF', '#4B5563', '#1F2937'
+                    ];
+                    
+                    airlineChart = new Chart(ctx2, {
+                        type: 'doughnut',
+                        data: {
+                            labels: data.airlines.map(a => a.airline),
+                            datasets: [{
+                                data: data.airlines.map(a => a.count),
+                                backgroundColor: colors,
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { boxWidth: 10, font: {size: 10} } }
+                            }
+                        }
+                    });
+                }
+
+                // 3. Hourly Chart (Line)
+                if (data.hourly) {
+                    const ctx3 = document.getElementById('hourlyChart').getContext('2d');
+                    if (hourlyChart) hourlyChart.destroy();
+                    hourlyChart = new Chart(ctx3, {
+                        type: 'line',
+                        data: {
+                            labels: data.hourly.map(h => h.hour),
+                            datasets: [{
+                                label: t.chart_activity || 'Activity',
+                                data: data.hourly.map(h => h.count),
+                                borderColor: '#10B981', // Green
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                tension: 0.4,
+                                fill: true,
+                                pointRadius: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: { 
+                                y: { beginAtZero: true, display: false },
+                                x: { ticks: { maxTicksLimit: 8, font: {size: 10} }, grid: {display: false} }
+                            },
+                            plugins: { legend: { display: false } }
+                        }
+                    });
+                }
+
+                // 4. Top Routes Chart (Horizontal Bar)
+                if (data.top_routes) {
+                    const ctx4 = document.getElementById('routeChart').getContext('2d');
+                    if (routeChart) routeChart.destroy();
+                    
+                    routeChart = new Chart(ctx4, {
+                        type: 'bar',
+                        data: {
+                            labels: data.top_routes.map(r => r.route),
+                            datasets: [{
+                                label: t.chart_flights || 'Flights',
+                                data: data.top_routes.map(r => r.count),
+                                backgroundColor: 'rgba(59, 130, 246, 0.6)', // Blue
+                                borderColor: 'rgba(59, 130, 246, 1)',
+                                borderWidth: 1,
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y', // Horizontal
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            layout: {
+                                padding: { left: 20, right: 30 }
+                            },
+                            scales: { 
+                                x: { beginAtZero: true, ticks: { stepSize: 1 } },
+                                y: { 
+                                    ticks: { 
+                                        font: {size: 11},
+                                        autoSkip: false,
+                                        color: '#374151'
+                                    } 
+                                }
+                            },
+                            plugins: { legend: { display: false } }
+                        }
+                    });
+                }
+
+            } catch (e) {
+                console.error("Failed to load detailed stats", e);
+                showToast("Failed to load statistics", true);
+            }
+        }
+
+        let lastProcessedData = null;
+
         // --- Process Logic ---
         async function processData() {
             const code = document.getElementById('code').value;
@@ -1049,15 +1799,32 @@
                     showToast("Error: " + data.error, true);
                 } else {
                     const resBox = document.getElementById('result');
-                    resBox.textContent = data.result;
-                    resBox.style.display = 'block';
-
-                    // Populate Visual Card
+                    
+                    // Populate Visual Card & Text
                     if (data.structured) {
                         try {
+                            lastProcessedData = data.structured; // Store for re-render
                             renderVisualCard(data.structured);
-                        } catch (e) { console.error("Visual render fail", e); }
+                            
+                            // Generate localized text on client side
+                            const locText = generateResultText(data.structured);
+                            resBox.textContent = locText;
+                            
+                            // Update clipboard content to localized text
+                            navigator.clipboard.writeText(locText).then(() => {
+                                showToast(translations[document.documentElement.lang]?.toast_processed || "Processed & Auto-Copied! 📋");
+                            }).catch(() => {});
+                            
+                        } catch (e) { 
+                            console.error("Visual/Text render fail", e); 
+                            // Fallback to server result
+                            resBox.textContent = data.result;
+                        }
+                    } else {
+                        resBox.textContent = data.result;
                     }
+                    
+                    resBox.style.display = 'block';
 
                     // Show action buttons
                     const actionBtns = document.getElementById('actionButtons');
@@ -1065,11 +1832,11 @@
                     else document.getElementById('copyBtn').style.display = 'inline-block';
 
                     // Auto Copy Logic
-                    navigator.clipboard.writeText(data.result).then(() => {
-                        showToast("Processed & Auto-Copied to clipboard! 📋");
-                    }).catch(() => {
-                        showToast("Processed! (Auto-copy failed, click Copy button)");
-                    });
+                    // navigator.clipboard.writeText(data.result).then(() => {
+                    //    showToast("Processed & Auto-Copied to clipboard! 📋");
+                    // }).catch(() => {
+                    //    showToast("Processed! (Auto-copy failed, click Copy button)");
+                    // });
 
                     // Refresh history silently
                     loadHistory();

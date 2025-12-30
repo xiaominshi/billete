@@ -1,0 +1,238 @@
+import re
+import os
+import datetime
+import json
+import time
+import requests
+import airportsdata
+from bs4 import BeautifulSoup
+import database
+
+class Logic:
+    def __init__(self):
+        self.logs = []
+        self.passengers = []
+        self.flights = []
+        self.layovers = []
+        self.base_year = datetime.datetime.now().year
+        self.current_year = self.base_year
+        self.last_month = None
+        self.airports_db = {}
+        
+        try:
+             self.airports_db = airportsdata.load('IATA')
+        except Exception as e:
+            self.log(f"Failed to load airportsdata: {e}")
+            self.airports_db = {}
+        
+        # Initialize map from DB
+        try:
+             self.airport_map = database.get_all_airports()
+        except Exception as e:
+             self.log(f"Failed to load DB airports: {e}")
+             self.airport_map = {}
+
+    def log(self, msg):
+        # Store log in memory to display in result if needed
+        self.logs.append(str(msg))
+        print(msg)
+
+    def load_airport_map(self):
+        return database.get_all_airports()
+    
+    def reload_airport_map(self):
+        self.airport_map = database.get_all_airports()
+
+    def save_airport_map(self):
+        pass
+
+    def update_airport(self, code, name):
+        database.upsert_airport(code, name)
+        self.airport_map[code] = name
+
+    def delete_airport(self, code):
+        """Removes an airport from the database and local map."""
+        if database.delete_airport(code):
+            if code in self.airport_map:
+                del self.airport_map[code]
+            return True
+        return False
+
+    def fetch_online_airport_name(self, code):
+        """
+        Fallback to online search using a Chinese source.
+        Target: airport.supfree.net
+        """
+        try:
+            url = f"http://airport.supfree.net/search.asp?s={code}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+            # Timeout is important - Reduced to 2s to prevent hanging
+            resp = requests.get(url, headers=headers, timeout=2)
+            # This site uses legacy encoding
+            resp.encoding = 'gbk'
+            
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                rows = soup.find_all('tr')
+                for row in rows:
+                    cols = row.find_all('td')
+                    if len(cols) >= 4:
+                        txts = [c.get_text().strip() for c in cols]
+                        if code in txts:
+                            possible_name = txts[1] 
+                            if possible_name == code:
+                                possible_name = txts[2]
+                            if possible_name and possible_name != code:
+                                return possible_name
+                                
+        except Exception as e:
+            self.log(f"Chinese lookup failed for {code}: {e}")
+        
+        return None
+
+    def resolve_airport(self, code):
+        """
+        Resolve airport code to name using 3 levels:
+        1. Local fly.txt (Priority)
+        2. Online Scraping (Priority for Chinese)
+        3. Offline airportsdata DB (Fallback, English)
+        """
+        code = code.upper()
+        
+        # 1. Local
+        if code in self.airport_map:
+            return self.airport_map[code]
+        
+        # 2. Online Chinese Fallback (Preferred for Language)
+        online_name = self.fetch_online_airport_name(code)
+        if online_name:
+             self.log(f"Found online (Chinese): {code} -> {online_name}")
+             self.update_airport(code, online_name)
+             return online_name
+
+        # 3. Offline DB (English Fallback)
+        if code in self.airports_db:
+             data = self.airports_db[code]
+             city = data.get('city', '')
+             name = data.get('name', '')
+             final_name = city if city else name
+             
+             self.log(f"Found offline (English): {code} -> {final_name}")
+             self.update_airport(code, final_name)
+             return final_name
+             
+        # Not found
+        return code
+
+    def get_history(self):
+        return database.get_history_entries(limit=50)
+
+    def clear_history(self):
+        return database.clear_history_entries()
+
+    def get_today_count(self):
+        return database.get_today_count()
+
+    def save_to_history(self, code, result, passenger_info="", route_info=""):
+        try:
+            database.add_history_entry(code, result, passenger_info, route_info)
+        except Exception as e:
+            self.log(f"Error saving history: {e}")
+
+    def merge_lines_without_sequence_number(self, text):
+        lines = text.split("\n")
+        output = []
+        previous_line = None
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Check if line starts with a number (e.g., "1.", "1 ", "14")
+            if re.match(r'^\d+.*', line):
+                if previous_line is not None:
+                    output.append(previous_line)
+                previous_line = line
+            else:
+                if previous_line is not None:
+                    previous_line += " " + line
+                else:
+                    previous_line = line
+        
+        if previous_line is not None:
+            output.append(previous_line)
+            
+        return "\n".join(output)
+
+    def replace_number(self, text):
+        return re.sub(r'\d+', '', text)
+
+    def contain_month(self, text):
+        months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+        return any(m in text for m in months)
+
+    def get_month_num(self, month_str):
+        months = {
+            "JAN": "01", "FEB": "02", "MAR": "03", "APR": "04", "MAY": "05", "JUN": "06",
+            "JUL": "07", "AUG": "08", "SEP": "09", "OCT": "10", "NOV": "11", "DEC": "12"
+        }
+        return months.get(month_str, "-1")
+
+    def parse_passengers(self, line, scanner):
+        parts = line.split(".")
+        for i in range(1, len(parts)):
+            p_name = self.replace_number(parts[i]).strip()
+            if p_name:
+                self.passengers.append({"name": p_name, "id": f"P{len(self.passengers)+1}", "passport": "", "ticket": ""})
+
+    def parse_ssr_docs(self, line_parts):
+        try:
+            data_part = None
+            for part in line_parts:
+                if part.startswith("P/"):
+                    data_part = part
+                    break
+            
+            if not data_part:
+                for part in line_parts:
+                    if "P/" in part and "/" in part:
+                         data_part = part
+                         break
+            
+            if data_part:
+                 data_part = data_part.replace(" ", "")
+                 split_data = data_part.split("/")
+                 if len(split_data) >= 3:
+                     passport = split_data[2]
+                     if len(self.passengers) == 1:
+                         self.passengers[0]["passport"] = passport
+        except Exception as e:
+            self.log(f"Error parsing SSR DOCS: {e}")
+
+    def parse_fa_pax(self, line_parts):
+        try:
+            ticket_part = None
+            for part in line_parts:
+                if "FA" in part or "PAX" in part:
+                    continue
+                if "-" in part and "/" in part:
+                    ticket_part = part
+                    break
+            
+            if ticket_part:
+                 ticket_data = ticket_part.split("/")
+                 ticket_num = ticket_data[0]
+                 if len(self.passengers) == 1:
+                     self.passengers[0]["ticket"] = ticket_num
+        except Exception as e:
+            self.log(f"Error parsing FA PAX: {e}")
+
+    def parse_flight(self, line_parts):
+        try:
+            date_idx = -1
+            for i, part in enumerate(line_parts):
+                if self.contain_month(part):
+           

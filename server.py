@@ -110,6 +110,63 @@ def get_stats():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/stats/detailed', methods=['GET'])
+def get_detailed_stats():
+    try:
+        import database
+        days = request.args.get('days', 7, type=int)
+        
+        daily_stats = database.get_daily_stats(days)
+        top_routes = database.get_top_routes(days, 5)
+        airline_stats = database.get_airline_stats(days, 1000)
+        hourly_stats = database.get_hourly_stats(days, 1000)
+        kpi_stats = database.get_kpi_stats(days)
+        
+        return jsonify({
+            'daily': daily_stats,
+            'top_routes': top_routes,
+            'airlines': airline_stats,
+            'hourly': hourly_stats,
+            'kpi': kpi_stats
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/history/export', methods=['GET'])
+def export_history():
+    try:
+        import database
+        import csv
+        import io
+        from flask import Response
+        
+        data = database.get_all_history_for_export()
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow(['ID', 'Timestamp', 'Raw Code', 'Passengers', 'Route'])
+        
+        # Rows
+        for row in data:
+            writer.writerow([
+                row['id'],
+                row['timestamp'],
+                row['code'],
+                row['passenger_info'],
+                row['route_info']
+            ])
+            
+        return Response(
+            output.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-disposition": "attachment; filename=history_export.csv"}
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/airports', methods=['GET', 'POST', 'DELETE'])
 def manage_airports():
     if request.method == 'GET':
