@@ -2555,14 +2555,7 @@
                             lastProcessedData = data.structured; // Store for re-render
                             renderVisualCard(data.structured);
                             
-                            // Generate localized text on client side
-                            const locText = generateResultText(data.structured);
-                            resBox.textContent = locText;
-                            
-                            // Update clipboard content to localized text
-                            navigator.clipboard.writeText(locText).then(() => {
-                                showToast(translations[document.documentElement.lang]?.toast_processed || "Processed & Auto-Copied! 📋");
-                            }).catch(() => {});
+                            // Text generation moved down to ensure it runs after hideLoading
                             
                         } catch (e) { 
                             console.error("Visual/Text render fail", e); 
@@ -2579,25 +2572,37 @@
                     const actionBtns = document.getElementById('actionButtons');
                     if (actionBtns) actionBtns.style.display = 'flex';
                     else document.getElementById('copyBtn').style.display = 'inline-block';
+                    
+                    // UX Improvement: Hide loading immediately before clipboard and background refresh
+                    hideLoading();
 
-                    // Auto Copy Logic
-                    // navigator.clipboard.writeText(data.result).then(() => {
-                    //    showToast("Processed & Auto-Copied to clipboard! 📋");
-                    // }).catch(() => {
-                    //    showToast("Processed! (Auto-copy failed, click Copy button)");
-                    // });
+                    // Generate localized text on client side
+                    let locText = "";
+                    if (data.structured) {
+                        try {
+                           locText = generateResultText(data.structured);
+                           resBox.textContent = locText;
+                        } catch(e) {
+                           locText = data.result;
+                        }
+                    } else {
+                        locText = data.result;
+                    }
 
-                    // Refresh history silently
-                    await loadHistory();
-                    await loadStats();
+                    // Auto Copy Logic (Now happens after loading is gone)
+                    navigator.clipboard.writeText(locText).then(() => {
+                        showToast(translations[document.documentElement.lang]?.toast_processed || "Processed & Auto-Copied! 📋");
+                    }).catch(() => {});
+
+                    // Refresh history silently in background
+                    loadHistory();
+                    loadStats();
                 }
             } catch (e) {
                 showToast("Connection Error: " + e, true);
-            } finally {
-                // processBtn.innerHTML = originalBtnText;
-                // processBtn.disabled = false;
-                hideLoading();
-            }
+                hideLoading(); // Ensure hidden on error
+            } 
+            // Finally block removed as we handle hideLoading manually for better timing
         }
 
         function downloadCalendar() {
