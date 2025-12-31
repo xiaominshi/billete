@@ -5,6 +5,8 @@ import sys
 import os
 import datetime
 from dotenv import load_dotenv
+from werkzeug.security import check_password_hash, generate_password_hash
+from functools import wraps
 
 load_dotenv()
 
@@ -12,6 +14,7 @@ app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), 't
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.jinja_env.auto_reload = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key_change_me")
 
 # Ensure database module is reloaded on restart
 import sys
@@ -29,15 +32,55 @@ Logic = _mod.Logic
 print(f" * Logic loaded from: {_logic_path}")
 print(f" * Logic module name: {_mod.__name__}")
 
+# --- Authentication Logic ---
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        from flask import session, redirect, url_for
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    from flask import session, redirect, url_for, flash
+    import database
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        user = database.get_user_by_username(username)
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            return redirect(url_for('home'))
+        else:
+            return render_template('login.html', error="Invalid username or password")
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    from flask import session, redirect, url_for
+    session.clear()
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def home():
-    return render_template('index.html')
+    from flask import session
+    return render_template('index.html', username=session.get('username'))
 
 import threading
 
 @app.route('/process', methods=['POST'])
+@login_required
 def process():
     try:
+        from flask import session
+        current_user_id = session.get('user_id')
         data = request.json
         code = data.get('code', '')
         
@@ -131,7 +174,8 @@ def process():
                 safe_route = route_info.replace('\x00', '') if route_info else ''
                 
                 print(f"DEBUG: calling logic.save_to_history. Safe code len: {len(safe_code)}")
-                logic_instance.save_to_history(safe_code, safe_result, safe_pax, safe_route, data_json=data_json)
+                # Pass current_user_id to logic
+                logic_instance.save_to_history(safe_code, safe_result, safe_pax, safe_route, data_json=data_json, user_id=current_user_id)
                 print("DEBUG: save_to_history completed.")
             except Exception as e:
                 print(f"Sync Save Error: {e}")
@@ -156,13 +200,18 @@ def process():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/history', methods=['GET'])
+@login_required
 def get_history():
+    from flask import session
+    current_user_id = session.get('user_id')
     # Use a temporary logic instance or call DB directly
     temp_logic = Logic()
-    return jsonify(temp_logic.get_history())
+    return jsonify(temp_logic.get_history(user_id=current_user_id))
 
 @app.route('/history', methods=['DELETE'])
+@login_required
 def clear_history():
+    # TODO: Add ownership check
     temp_logic = Logic()
     # If JSON provided with 'id', delete single item
     if request.is_json:
@@ -181,6 +230,7 @@ def clear_history():
         return jsonify({'error': 'Failed to clear history'}), 500
 
 @app.route('/history/update', methods=['POST'])
+@login_required
 def update_history():
     try:
         import database
@@ -207,10 +257,13 @@ def update_history():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/stats', methods=['GET'])
+@login_required
 def get_stats():
     try:
+        from flask import session
+        current_user_id = session.get('user_id')
         temp_logic = Logic()
-        count = temp_logic.get_today_count()
+        count = temp_logic.get_today_count(user_id=current_user_id)
         response = jsonify({'today_count': count})
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return response
@@ -218,27 +271,33 @@ def get_stats():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/stats/detailed', methods=['GET'])
+@login_required
 def get_detailed_stats():
     try:
+        from flask import session
+        current_user_id = session.get('user_id')
         import database
         days = request.args.get('days', 7, type=int)
         
         # Use optimized single-query aggregation to reduce latency on Render
-        stats = database.get_detailed_stats_aggregated(days)
+        stats = database.get_detailed_stats_aggregated(days, user_id=current_user_id)
         return jsonify(stats)
     except Exception as e:
         print(f"Stats Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/history/export', methods=['GET'])
+@login_required
 def export_history():
     try:
+        from flask import session
+        current_user_id = session.get('user_id')
         import database
         import csv
         import io
         from flask import Response
         
-        data = database.get_all_history_for_export()
+        data = database.get_all_history_for_export(user_id=current_user_id)
         
         # Create CSV in memory
         output = io.StringIO()

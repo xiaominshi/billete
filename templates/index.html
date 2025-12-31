@@ -550,8 +550,8 @@
                     <div style="text-align:left; display:flex; gap:10px; align-items:center;">
                         <h4 style="margin:0; color:#4B5563;" data-i18n="stats_trend">趋势 (Trends)</h4>
                         <div style="display:flex; background:#E5E7EB; border-radius:6px; padding:2px;">
-                            <button class="btn-range active" onclick="setStatsRange(7)" id="btn-range-7" data-i18n="btn_7d">7 Days</button>
-                            <button class="btn-range" onclick="setStatsRange(30)" id="btn-range-30" data-i18n="btn_30d">30 Days</button>
+                            <button class="btn-range" onclick="setStatsRange(7)" id="btn-range-7" data-i18n="btn_7d">7 Days</button>
+                            <button class="btn-range active" onclick="setStatsRange(30)" id="btn-range-30" data-i18n="btn_30d">30 Days</button>
                             <button class="btn-range" onclick="setStatsRange(90)" id="btn-range-90" data-i18n="btn_90d">90 Days</button>
                         </div>
                     </div>
@@ -2258,7 +2258,7 @@
         let airlineChart = null;
         let hourlyChart = null;
         let routeChart = null;
-        let currentStatsRange = 7;
+        let currentStatsRange = 30;
 
         function showStats() {
             document.getElementById('statsModal').style.display = 'block';

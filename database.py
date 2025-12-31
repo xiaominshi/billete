@@ -27,6 +27,12 @@ else:
 metadata = MetaData()
 
 # Define tables using SQLAlchemy Core for cross-db compatibility
+users_table = Table('users', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('username', String, unique=True, nullable=False),
+    Column('password_hash', String, nullable=False)
+)
+
 airports_table = Table('airports', metadata,
     Column('code', String, primary_key=True),
     Column('name', String, nullable=False)
@@ -34,6 +40,7 @@ airports_table = Table('airports', metadata,
 
 history_table = Table('history', metadata,
     Column('id', Integer, primary_key=True),
+    Column('user_id', Integer), # Foreign key to users
     Column('timestamp', String),
     Column('code', String),
     Column('result', String),
@@ -53,14 +60,13 @@ def init_db():
     columns_to_add = [
         ("cost", "TEXT"),
         ("price", "TEXT"),
-        ("data_json", "TEXT")
+        ("data_json", "TEXT"),
+        ("user_id", "INTEGER")
     ]
     
     for col_name, col_type in columns_to_add:
         try:
             # Use engine.begin() to create a fresh transaction for EACH column
-            # This ensures if one fails (e.g. column exists), others still run.
-            # And avoids the "current transaction is aborted" error in Postgres.
             with engine.begin() as conn:
                 try:
                     if dialect == "postgresql":
@@ -70,10 +76,25 @@ def init_db():
                         conn.execute(text(f"ALTER TABLE history ADD COLUMN {col_name} {col_type}"))
                 except Exception as e:
                     # Ignore error only if it's likely "column exists"
-                    # But print it for debugging
-                    print(f"Migration note for {col_name}: {e}")
+                    pass
         except Exception as outer_e:
-            print(f"Transaction error during migration for {col_name}: {outer_e}")
+            pass
+
+    # Ensure admin user exists
+    from werkzeug.security import generate_password_hash
+    if not get_user_by_username('admin'):
+        create_user('admin', generate_password_hash('admin'))
+        print("Initialized admin user.")
+    
+    # Assign existing history to admin (user_id=1) if user_id is NULL
+    try:
+        with engine.begin() as conn:
+            admin = get_user_by_username('admin')
+            if admin:
+                conn.execute(text("UPDATE history SET user_id = :uid WHERE user_id IS NULL"), {"uid": admin['id']})
+    except Exception as e:
+        print(f"Migration error assigning history to admin: {e}")
+
 
 def create_user(username, password_hash):
     try:
@@ -160,13 +181,19 @@ def delete_airport(code):
         print(f"Delete Error: {e}")
         return False
 
-def get_history_entries(limit=100):
+def get_history_entries(limit=100, user_id=None):
     with engine.connect() as conn:
         # Use text() for query, but result columns are accessible by name
-        result = conn.execute(
-            text("SELECT * FROM history ORDER BY id DESC LIMIT :limit"),
-            {"limit": limit}
-        )
+        sql = "SELECT * FROM history"
+        params = {"limit": limit}
+        
+        if user_id:
+            sql += " WHERE user_id = :user_id"
+            params["user_id"] = user_id
+            
+        sql += " ORDER BY id DESC LIMIT :limit"
+        
+        result = conn.execute(text(sql), params)
         history = []
         for row in result:
             # SQLAlchemy rows behave like named tuples
@@ -183,8 +210,8 @@ def get_history_entries(limit=100):
             })
         return history
 
-def add_history_entry(code, result, passenger_info, route_info, timestamp=None, cost=None, price=None, data_json=None):
-    print(f"DEBUG: add_history_entry called. Code len: {len(code) if code else 0}")
+def add_history_entry(code, result, passenger_info, route_info, timestamp=None, cost=None, price=None, data_json=None, user_id=None):
+    print(f"DEBUG: add_history_entry called. Code len: {len(code) if code else 0}, User: {user_id}")
     if not timestamp:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -197,7 +224,8 @@ def add_history_entry(code, result, passenger_info, route_info, timestamp=None, 
         "route_info": route_info if route_info else "",
         "cost": cost if cost is not None else "",
         "price": price if price is not None else "",
-        "data_json": data_json if data_json is not None else "{}"
+        "data_json": data_json if data_json is not None else "{}",
+        "user_id": user_id
     }
 
     try:
@@ -205,14 +233,19 @@ def add_history_entry(code, result, passenger_info, route_info, timestamp=None, 
         with engine.begin() as conn:
             # 1. Deduplication (Enabled)
             # Delete old record with the same code to ensure only the latest version is stored
+            # Scope deduplication to user? Or global? Probably user-scoped.
             if vals['code']:
-                conn.execute(text("DELETE FROM history WHERE code = :code"), {"code": vals['code']})
+                if user_id:
+                    conn.execute(text("DELETE FROM history WHERE code = :code AND user_id = :user_id"), 
+                                {"code": vals['code'], "user_id": user_id})
+                else:
+                     conn.execute(text("DELETE FROM history WHERE code = :code"), {"code": vals['code']})
             
             # 2. Insert new record
             conn.execute(
                 text('''
-                    INSERT INTO history (timestamp, code, result, passenger_info, route_info, cost, price, data_json)
-                    VALUES (:timestamp, :code, :result, :passenger_info, :route_info, :cost, :price, :data_json)
+                    INSERT INTO history (timestamp, code, result, passenger_info, route_info, cost, price, data_json, user_id)
+                    VALUES (:timestamp, :code, :result, :passenger_info, :route_info, :cost, :price, :data_json, :user_id)
                 '''),
                 vals
             )
@@ -302,16 +335,19 @@ def delete_old_history(days=30):
         print(f"Failed to delete old history: {e}")
         return 0
 
-def get_today_count():
+def get_today_count(user_id=None):
     today_prefix = datetime.datetime.now().strftime("%Y-%m-%d") + "%"
     with engine.connect() as conn:
-        result = conn.execute(
-            text("SELECT COUNT(*) FROM history WHERE timestamp LIKE :prefix"),
-            {"prefix": today_prefix}
-        ).scalar()
+        sql = "SELECT COUNT(*) FROM history WHERE timestamp LIKE :prefix"
+        params = {"prefix": today_prefix}
+        if user_id:
+            sql += " AND user_id = :user_id"
+            params["user_id"] = user_id
+            
+        result = conn.execute(text(sql), params).scalar()
         return result
 
-def get_kpi_stats(days=7):
+def get_kpi_stats(days=7, user_id=None):
     """
     Get Key Performance Indicators (KPIs) for the last 'days' days.
     Also calculates trend vs previous period.
@@ -333,6 +369,10 @@ def get_kpi_stats(days=7):
             else:
                 time_filter = "timestamp >= :start"
                 params = {"start": s_date}
+
+            if user_id:
+                time_filter += " AND user_id = :user_id"
+                params["user_id"] = user_id
 
             # Total Searches
             total_searches = conn.execute(
@@ -382,10 +422,14 @@ def get_kpi_stats(days=7):
 
     # Busiest Day (Current Period Only)
     with engine.connect() as conn:
-        daily_res = conn.execute(
-            text("SELECT SUBSTR(timestamp, 1, 10) as dt, COUNT(*) as cnt FROM history WHERE timestamp >= :start GROUP BY dt ORDER BY cnt DESC LIMIT 1"),
-            {"start": start_str}
-        ).fetchone()
+        sql = "SELECT SUBSTR(timestamp, 1, 10) as dt, COUNT(*) as cnt FROM history WHERE timestamp >= :start"
+        params = {"start": start_str}
+        if user_id:
+            sql += " AND user_id = :user_id"
+            params["user_id"] = user_id
+        sql += " GROUP BY dt ORDER BY cnt DESC LIMIT 1"
+        
+        daily_res = conn.execute(text(sql), params).fetchone()
         busiest_day = daily_res.dt if daily_res else "N/A"
         
     return {
@@ -398,7 +442,7 @@ def get_kpi_stats(days=7):
         "trend_avg": change_avg
     }
 
-def get_daily_stats(days=7):
+def get_daily_stats(days=7, user_id=None):
     """
     Get flight processing counts for the last 'days' days.
     """
@@ -414,14 +458,19 @@ def get_daily_stats(days=7):
         curr += datetime.timedelta(days=1)
         
     with engine.connect() as conn:
-        sql = text('''
+        sql = '''
             SELECT SUBSTR(timestamp, 1, 10) as date_str, COUNT(*) as cnt 
             FROM history 
             WHERE timestamp >= :start_ts
-            GROUP BY date_str
-        ''')
+        '''
+        params = {"start_ts": start_date.strftime("%Y-%m-%d")}
+        if user_id:
+            sql += " AND user_id = :user_id"
+            params["user_id"] = user_id
+            
+        sql += " GROUP BY date_str"
         
-        result = conn.execute(sql, {"start_ts": start_date.strftime("%Y-%m-%d")})
+        result = conn.execute(text(sql), params)
         db_counts = {row.date_str: row.cnt for row in result}
         
         for d in date_list:
@@ -429,7 +478,7 @@ def get_daily_stats(days=7):
             
     return stats
 
-def get_top_routes(days=7, limit=5):
+def get_top_routes(days=7, limit=5, user_id=None):
     """
     Get most frequent routes from history in the last 'days' days.
     """
@@ -437,20 +486,22 @@ def get_top_routes(days=7, limit=5):
     start_str = start_date.strftime("%Y-%m-%d")
 
     with engine.connect() as conn:
-        result = conn.execute(
-            text('''
-                SELECT route_info, COUNT(*) as cnt 
-                FROM history 
-                WHERE route_info IS NOT NULL AND route_info != '' AND timestamp >= :start
-                GROUP BY route_info 
-                ORDER BY cnt DESC 
-                LIMIT :limit
-            '''),
-            {"limit": limit, "start": start_str}
-        )
+        sql = '''
+            SELECT route_info, COUNT(*) as cnt 
+            FROM history 
+            WHERE route_info IS NOT NULL AND route_info != '' AND timestamp >= :start
+        '''
+        params = {"limit": limit, "start": start_str}
+        if user_id:
+            sql += " AND user_id = :user_id"
+            params["user_id"] = user_id
+            
+        sql += " GROUP BY route_info ORDER BY cnt DESC LIMIT :limit"
+        
+        result = conn.execute(text(sql), params)
         return [{"route": row.route_info, "count": row.cnt} for row in result]
 
-def get_airline_stats(days=7, limit=1000):
+def get_airline_stats(days=7, limit=1000, user_id=None):
     """
     Get airline distribution stats for the last 'days' days.
     """
@@ -458,10 +509,14 @@ def get_airline_stats(days=7, limit=1000):
     start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
 
     with engine.connect() as conn:
-        result = conn.execute(
-            text("SELECT code FROM history WHERE timestamp >= :start ORDER BY id DESC LIMIT :limit"),
-            {"limit": limit, "start": start_str}
-        )
+        sql = "SELECT code FROM history WHERE timestamp >= :start"
+        params = {"limit": limit, "start": start_str}
+        if user_id:
+            sql += " AND user_id = :user_id"
+            params["user_id"] = user_id
+        sql += " ORDER BY id DESC LIMIT :limit"
+        
+        result = conn.execute(text(sql), params)
         
         airline_counts = {}
         import re
@@ -478,7 +533,7 @@ def get_airline_stats(days=7, limit=1000):
         stats.sort(key=lambda x: x["count"], reverse=True)
         return stats[:10]
 
-def get_hourly_stats(days=7, limit=1000):
+def get_hourly_stats(days=7, limit=1000, user_id=None):
     """
     Get activity by hour of day (0-23) for the last 'days' days.
     """
@@ -486,10 +541,14 @@ def get_hourly_stats(days=7, limit=1000):
     start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
 
     with engine.connect() as conn:
-        result = conn.execute(
-            text("SELECT timestamp FROM history WHERE timestamp >= :start ORDER BY id DESC LIMIT :limit"),
-            {"limit": limit, "start": start_str}
-        )
+        sql = "SELECT timestamp FROM history WHERE timestamp >= :start"
+        params = {"limit": limit, "start": start_str}
+        if user_id:
+            sql += " AND user_id = :user_id"
+            params["user_id"] = user_id
+        sql += " ORDER BY id DESC LIMIT :limit"
+        
+        result = conn.execute(text(sql), params)
         
         hours = {h: 0 for h in range(24)}
         
@@ -506,10 +565,17 @@ def get_hourly_stats(days=7, limit=1000):
         stats = [{"hour": f"{h:02d}:00", "count": hours[h]} for h in range(24)]
         return stats
 
-def get_all_history_for_export():
+def get_all_history_for_export(user_id=None):
     """Returns all history for CSV export"""
     with engine.connect() as conn:
-        result = conn.execute(text("SELECT * FROM history ORDER BY id DESC"))
+        sql = "SELECT * FROM history"
+        params = {}
+        if user_id:
+            sql += " WHERE user_id = :user_id"
+            params["user_id"] = user_id
+        sql += " ORDER BY id DESC"
+        
+        result = conn.execute(text(sql), params)
         return [{
             "id": row.id,
             "timestamp": row.timestamp,
@@ -626,7 +692,7 @@ def get_customer_stats(days=30, limit=50):
             "top_customers": top_customers
         }
 
-def get_detailed_stats_aggregated(days=7):
+def get_detailed_stats_aggregated(days=7, user_id=None):
     """
     Consolidated function to get all stats in a single DB connection.
     Drastically reduces latency for remote databases (like Neon on Render).
@@ -647,37 +713,45 @@ def get_detailed_stats_aggregated(days=7):
     stats = {}
     
     with engine.connect() as conn:
+        # Base WHERE clause
+        where_clause = "WHERE timestamp >= :start"
+        params = {"start": start_date.strftime("%Y-%m-%d")}
+        if user_id:
+            where_clause += " AND user_id = :user_id"
+            params["user_id"] = user_id
+
         # 1. Daily Stats
-        sql_daily = text('''
+        sql_daily = text(f'''
             SELECT SUBSTR(timestamp, 1, 10) as date_str, COUNT(*) as cnt 
             FROM history 
-            WHERE timestamp >= :start
+            {where_clause}
             GROUP BY date_str
         ''')
-        res_daily = conn.execute(sql_daily, {"start": start_date.strftime("%Y-%m-%d")})
+        res_daily = conn.execute(sql_daily, params)
         daily_map = {row.date_str: row.cnt for row in res_daily}
         stats['daily'] = [{"date": d, "count": daily_map.get(d, 0)} for d in date_list]
 
         # 2. Top Routes
-        sql_routes = text('''
+        sql_routes = text(f'''
             SELECT route_info, COUNT(*) as cnt 
             FROM history 
-            WHERE route_info IS NOT NULL AND route_info != '' AND timestamp >= :start
+            {where_clause} AND route_info IS NOT NULL AND route_info != ''
             GROUP BY route_info 
             ORDER BY cnt DESC 
             LIMIT 5
         ''')
-        res_routes = conn.execute(sql_routes, {"start": start_date.strftime("%Y-%m-%d")})
+        res_routes = conn.execute(sql_routes, params)
         stats['top_routes'] = [{"route": row.route_info, "count": row.cnt} for row in res_routes]
         
         # 3. Airline Stats (Fetch raw codes to process in Python)
         # 4. Hourly Stats (Fetch timestamps to process in Python)
         # 5. Customer Stats (Fetch passenger_info/code)
         # We can fetch a larger dataset once and process in memory to avoid multiple queries
-        # Fetching last 1000 entries or all within timeframe? 
-        # Timeframe is safer.
-        sql_raw = text("SELECT timestamp, code, passenger_info FROM history WHERE timestamp >= :start")
-        res_raw = conn.execute(sql_raw, {"start": start_str})
+        
+        # Need to reset params["start"] to full timestamp for this query
+        params["start"] = start_str
+        sql_raw = text(f"SELECT timestamp, code, passenger_info FROM history {where_clause}")
+        res_raw = conn.execute(sql_raw, params)
         
         # Process in-memory
         import re
@@ -779,15 +853,15 @@ def get_detailed_stats_aggregated(days=7):
         
         # KPI Previous Period (Need one more query)
         # To save latency, we do one count query for prev period
-        sql_prev = text("SELECT COUNT(*) as cnt, (SELECT COUNT(*) FROM history WHERE timestamp >= :p_start AND timestamp < :p_end AND code LIKE '%FA PAX%') as ticketed_rows FROM history WHERE timestamp >= :p_start AND timestamp < :p_end")
-        # Note: Calculating precise pax/avg for previous period via single query is complex due to regex counting.
-        # We will approximate or just run a second lightweight scan.
-        # Actually, let's just run the separate simple counts. It's much faster than 6 full queries.
         
-        # For Trend: we need Prev Total Searches, Prev Total Pax
-        # Let's do a simple scan for prev period
-        res_prev = conn.execute(text("SELECT code FROM history WHERE timestamp >= :p_start AND timestamp < :p_end"), 
-                                {"p_start": prev_start_str, "p_end": start_str})
+        # Build prev query
+        prev_where = "WHERE timestamp >= :p_start AND timestamp < :p_end"
+        prev_params = {"p_start": prev_start_str, "p_end": start_str}
+        if user_id:
+            prev_where += " AND user_id = :user_id"
+            prev_params["user_id"] = user_id
+            
+        res_prev = conn.execute(text(f"SELECT code FROM history {prev_where}"), prev_params)
         
         prev_searches = 0
         prev_pax = 0
@@ -807,8 +881,7 @@ def get_detailed_stats_aggregated(days=7):
             if p == 0: return 100 if c > 0 else 0
             return round(((c - p) / p) * 100, 1)
             
-        # Busiest Day (Already computed in Daily loop? No, daily loop is strict range.
-        # But we have daily_map from the daily query.
+        # Busiest Day
         busiest_day = "N/A"
         if daily_map:
             busiest_day = max(daily_map, key=daily_map.get)

@@ -112,19 +112,21 @@ class Logic:
             return self.airport_map[code]
         return code
 
-    def get_history(self):
-        return database.get_history_entries(limit=50)
+    def get_history(self, user_id=None):
+        return database.get_history_entries(limit=50, user_id=user_id)
         
     def delete_history_item(self, history_id):
+        # TODO: Add user ownership check
         return database.delete_history_entry(history_id)
 
     def clear_history(self):
+        # TODO: Add user ownership check
         return database.clear_history_entries()
 
-    def get_today_count(self):
-        return database.get_today_count()
+    def get_today_count(self, user_id=None):
+        return database.get_today_count(user_id=user_id)
 
-    def save_to_history(self, code, result, passenger_info="", route_info="", cost=None, price=None, data_json="{}"):
+    def save_to_history(self, code, result, passenger_info="", route_info="", cost=None, price=None, data_json="{}", user_id=None):
         try:
             # Must use keyword arguments to avoid positional mismatch with timestamp
             
@@ -140,7 +142,8 @@ class Logic:
                 timestamp=None, # Explicitly pass None for timestamp to let DB/function handle it
                 cost=cost if cost is not None else "", 
                 price=price if price is not None else "", 
-                data_json=data_json
+                data_json=data_json,
+                user_id=user_id
             )
             
             if not success:
