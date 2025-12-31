@@ -52,7 +52,21 @@ def login():
         password = request.form.get('password')
         
         user = database.get_user_by_username(username)
-        if user and check_password_hash(user['password_hash'], password):
+        # Check password hash (standard) OR plain text comparison (temporary fix for existing plain text)
+        is_valid = False
+        if user:
+            # Try hash verify first
+            try:
+                if check_password_hash(user['password_hash'], password):
+                    is_valid = True
+            except:
+                pass
+            
+            # If hash failed (or raised error due to format), try plain text match
+            if not is_valid and user['password_hash'] == password:
+                is_valid = True
+        
+        if is_valid:
             session['user_id'] = user['id']
             session['username'] = user['username']
             return redirect(url_for('home'))

@@ -499,10 +499,16 @@
 
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <div style="width: 100px;"></div> <!-- Spacer for center alignment -->
+            <div style="width: 150px;"></div> <!-- Spacer for center alignment -->
             <h1 style="margin: 0;">✈️ LULI Web Service ✈️</h1>
-            <div style="width: 100px; text-align: right;">
-                <select id="langSelect" onchange="switchLanguage(this.value)" style="padding: 5px; border-radius: 6px; border: 1px solid #ccc;">
+            <div style="width: 150px; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                {% if username %}
+                <div style="font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 8px; background: white; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    <span style="font-weight: 600;">👤 {{ username }}</span>
+                    <a href="/logout" style="color: #EF4444; text-decoration: none; font-size: 12px; border-left: 1px solid #E5E7EB; padding-left: 8px;" title="Sign Out">退出 ➜</a>
+                </div>
+                {% endif %}
+                <select id="langSelect" onchange="switchLanguage(this.value)" style="padding: 4px; border-radius: 6px; border: 1px solid #E5E7EB; font-size: 12px;">
                     <option value="zh">🇨🇳 中文</option>
                     <option value="en">🇺🇸 English</option>
                     <option value="es">🇪🇸 Español</option>
