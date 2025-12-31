@@ -505,6 +505,9 @@
                 {% if username %}
                 <div style="font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 8px; background: white; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                     <span style="font-weight: 600;">👤 {{ username }}</span>
+                    {% if username == 'admin' %}
+                    <a href="/register" style="color: #10B981; text-decoration: none; font-size: 12px; border-left: 1px solid #E5E7EB; padding-left: 8px;" title="Register User">➕</a>
+                    {% endif %}
                     <a href="/change_password" style="color: #4F46E5; text-decoration: none; font-size: 12px; border-left: 1px solid #E5E7EB; padding-left: 8px;" title="Change Password">🔑</a>
                     <a href="/logout" style="color: #EF4444; text-decoration: none; font-size: 12px; border-left: 1px solid #E5E7EB; padding-left: 8px;" title="Sign Out">退出 ➜</a>
                 </div>
