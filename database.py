@@ -235,10 +235,21 @@ def delete_history_entry(history_id):
         return False
 
 def clear_history_entries():
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM history"))
-        conn.commit()
-    return True
+    try:
+        with engine.connect() as conn:
+            # Only delete NON-ISSUED and NO-FINANCIAL data
+            sql = text('''
+                DELETE FROM history 
+                WHERE (code NOT LIKE '%FA PAX%')
+                  AND (cost IS NULL OR cost = '' OR cost = '0')
+                  AND (price IS NULL OR price = '' OR price = '0')
+            ''')
+            result = conn.execute(sql)
+            conn.commit()
+            return result.rowcount
+    except Exception as e:
+        print(f"Clear History Error: {e}")
+        return 0
 
 def delete_old_history(days=30):
     """

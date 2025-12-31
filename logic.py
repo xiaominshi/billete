@@ -490,10 +490,12 @@ class Logic:
         self.layovers = []
         self.fa_pax_count = 0 # Track how many FA PAX lines we've seen for sequential assignment fallback
         # Ensure airport map is up-to-date from DB
-        try:
-            self.reload_airport_map()
-        except Exception as e:
-            self.log(f"Reload airport map failed: {e}")
+        # PERFORMANCE FIX: Do NOT reload map on every request.
+        # It causes unnecessary DB reads and latency on Render.
+        # try:
+        #    self.reload_airport_map()
+        # except Exception as e:
+        #    self.log(f"Reload airport map failed: {e}")
         
         # Determine year context before parsing flights
         # Check all months in the raw code first
