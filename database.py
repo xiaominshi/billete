@@ -583,7 +583,205 @@ def get_customer_stats(days=30, limit=50):
             "top_customers": top_customers
         }
 
+def get_detailed_stats_aggregated(days=7):
+    """
+    Consolidated function to get all stats in a single DB connection.
+    Drastically reduces latency for remote databases (like Neon on Render).
+    """
+    now = datetime.datetime.now()
+    start_date = now - datetime.timedelta(days=days)
+    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
+    prev_start_date = start_date - datetime.timedelta(days=days)
+    prev_start_str = prev_start_date.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Pre-calculate date list for daily stats
+    date_list = []
+    curr = start_date
+    while curr <= now:
+        date_list.append(curr.strftime("%Y-%m-%d"))
+        curr += datetime.timedelta(days=1)
+        
+    stats = {}
+    
+    with engine.connect() as conn:
+        # 1. Daily Stats
+        sql_daily = text('''
+            SELECT SUBSTR(timestamp, 1, 10) as date_str, COUNT(*) as cnt 
+            FROM history 
+            WHERE timestamp >= :start
+            GROUP BY date_str
+        ''')
+        res_daily = conn.execute(sql_daily, {"start": start_date.strftime("%Y-%m-%d")})
+        daily_map = {row.date_str: row.cnt for row in res_daily}
+        stats['daily'] = [{"date": d, "count": daily_map.get(d, 0)} for d in date_list]
+
+        # 2. Top Routes
+        sql_routes = text('''
+            SELECT route_info, COUNT(*) as cnt 
+            FROM history 
+            WHERE route_info IS NOT NULL AND route_info != '' AND timestamp >= :start
+            GROUP BY route_info 
+            ORDER BY cnt DESC 
+            LIMIT 5
+        ''')
+        res_routes = conn.execute(sql_routes, {"start": start_date.strftime("%Y-%m-%d")})
+        stats['top_routes'] = [{"route": row.route_info, "count": row.cnt} for row in res_routes]
+        
+        # 3. Airline Stats (Fetch raw codes to process in Python)
+        # 4. Hourly Stats (Fetch timestamps to process in Python)
+        # 5. Customer Stats (Fetch passenger_info/code)
+        # We can fetch a larger dataset once and process in memory to avoid multiple queries
+        # Fetching last 1000 entries or all within timeframe? 
+        # Timeframe is safer.
+        sql_raw = text("SELECT timestamp, code, passenger_info FROM history WHERE timestamp >= :start")
+        res_raw = conn.execute(sql_raw, {"start": start_str})
+        
+        # Process in-memory
+        import re
+        airline_counts = {}
+        hourly_counts = {h: 0 for h in range(24)}
+        pax_counts = {}
+        total_pax_entries = 0
+        
+        # KPI Accumulators
+        kpi_total_searches = 0
+        kpi_total_pax = 0
+        kpi_ticketed_orders = 0
+        
+        raw_rows = [] 
+        
+        for row in res_raw:
+            raw_rows.append(row)
+            kpi_total_searches += 1
+            ts = row.timestamp
+            code = row.code or ""
+            p_info = row.passenger_info or ""
+            
+            # Hourly
+            try:
+                if len(ts) >= 13:
+                    h = int(ts[11:13])
+                    hourly_counts[h] += 1
+            except: pass
+            
+            # Airlines
+            matches = re.findall(r'([A-Z0-9]{2})\d{3,4}', code)
+            for al in matches:
+                if not al.isdigit(): airline_counts[al] = airline_counts.get(al, 0) + 1
+            
+            # KPI Pax
+            pax_tickets_in_code = code.count("FA PAX")
+            if pax_tickets_in_code > 0:
+                kpi_total_pax += pax_tickets_in_code
+                kpi_ticketed_orders += 1
+            
+            # Customer Stats Logic (Simplified from get_customer_stats)
+            if "FA PAX" in code and p_info:
+                 # Extract names
+                lines = [l for l in p_info.split('\n') if l.strip()]
+                # Find valid indices if possible
+                fa_pax_matches = re.findall(r'FA PAX.*?/P(\d+)', code)
+                valid_indices = {int(idx) for idx in fa_pax_matches} if fa_pax_matches else set()
+                
+                for i, line in enumerate(lines):
+                    if valid_indices and (i + 1) not in valid_indices: continue
+                    
+                    name = line.strip().upper()
+                    if ':' in name:
+                        parts = name.split(':', 1)
+                        if "PASSENGER" in parts[0] or any(c.isdigit() for c in parts[0]):
+                            name = parts[1].strip()
+                    
+                    for title in ["MR", "MS", "MRS", "MISS", "MSTR"]:
+                        if name.endswith(" " + title): name = name[:-(len(title)+1)].strip()
+                        elif name.startswith(title + " "): name = name[(len(title)+1):].strip()
+                    
+                    name = re.sub(r'^\d+\.?\s*', '', name)
+                    if ',' in name:
+                         for sn in name.split(','):
+                             sn = sn.strip()
+                             if len(sn) < 2: continue
+                             pax_counts[sn] = pax_counts.get(sn, 0) + 1
+                             total_pax_entries += 1
+                    else:
+                        if len(name) < 2: continue
+                        pax_counts[name] = pax_counts.get(name, 0) + 1
+                        total_pax_entries += 1
+
+        # Finish Airlines
+        sorted_airlines = sorted([{"airline": k, "count": v} for k, v in airline_counts.items()], key=lambda x: x['count'], reverse=True)
+        stats['airlines'] = sorted_airlines[:10]
+        
+        # Finish Hourly
+        stats['hourly'] = [{"hour": f"{h:02d}:00", "count": hourly_counts[h]} for h in range(24)]
+        
+        # Finish Customers
+        unique_customers = len(pax_counts)
+        returning_customers = sum(1 for c in pax_counts.values() if c > 1)
+        new_customers = unique_customers - returning_customers
+        repeat_rate = round((returning_customers / unique_customers * 100), 1) if unique_customers > 0 else 0
+        sorted_pax = sorted([{"name": k, "count": v} for k, v in pax_counts.items()], key=lambda x: x['count'], reverse=True)
+        
+        stats['customers'] = {
+            "unique_customers": unique_customers,
+            "returning_customers": returning_customers,
+            "new_customers": new_customers,
+            "repeat_rate": repeat_rate,
+            "top_customers": sorted_pax[:50]
+        }
+        
+        # Finish KPI (Current)
+        curr_avg = round(kpi_total_pax / kpi_ticketed_orders, 1) if kpi_ticketed_orders > 0 else 0
+        
+        # KPI Previous Period (Need one more query)
+        # To save latency, we do one count query for prev period
+        sql_prev = text("SELECT COUNT(*) as cnt, (SELECT COUNT(*) FROM history WHERE timestamp >= :p_start AND timestamp < :p_end AND code LIKE '%FA PAX%') as ticketed_rows FROM history WHERE timestamp >= :p_start AND timestamp < :p_end")
+        # Note: Calculating precise pax/avg for previous period via single query is complex due to regex counting.
+        # We will approximate or just run a second lightweight scan.
+        # Actually, let's just run the separate simple counts. It's much faster than 6 full queries.
+        
+        # For Trend: we need Prev Total Searches, Prev Total Pax
+        # Let's do a simple scan for prev period
+        res_prev = conn.execute(text("SELECT code FROM history WHERE timestamp >= :p_start AND timestamp < :p_end"), 
+                                {"p_start": prev_start_str, "p_end": start_str})
+        
+        prev_searches = 0
+        prev_pax = 0
+        prev_ticketed = 0
+        
+        for row in res_prev:
+            prev_searches += 1
+            c = row.code or ""
+            pc = c.count("FA PAX")
+            if pc > 0:
+                prev_pax += pc
+                prev_ticketed += 1
+        
+        prev_avg = round(prev_pax / prev_ticketed, 1) if prev_ticketed > 0 else 0
+        
+        def calc_change(c, p):
+            if p == 0: return 100 if c > 0 else 0
+            return round(((c - p) / p) * 100, 1)
+            
+        # Busiest Day (Already computed in Daily loop? No, daily loop is strict range.
+        # But we have daily_map from the daily query.
+        busiest_day = "N/A"
+        if daily_map:
+            busiest_day = max(daily_map, key=daily_map.get)
+            
+        stats['kpi'] = {
+            "total_searches": kpi_total_searches,
+            "total_pax": kpi_total_pax,
+            "avg_pax": curr_avg,
+            "busiest_day": busiest_day,
+            "trend_searches": calc_change(kpi_total_searches, prev_searches),
+            "trend_pax": calc_change(kpi_total_pax, prev_pax),
+            "trend_avg": calc_change(curr_avg, prev_avg)
+        }
+        
+    return stats
+
 # Initialize on import
 init_db()
-# Auto-cleanup old history on startup (keep 30 days)
-delete_old_history(30)
+# Auto-cleanup removed to preserve history
+# delete_old_history(30)

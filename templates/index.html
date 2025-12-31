@@ -2198,7 +2198,9 @@
 
         async function loadDetailedStats(days=7) {
             try {
-                const response = await fetch(`/stats/detailed?days=${days}`);
+                // Add timestamp to prevent caching
+                const ts = new Date().getTime();
+                const response = await fetch(`/stats/detailed?days=${days}&t=${ts}`);
                 const data = await response.json();
                 
                 // Update KPI Cards

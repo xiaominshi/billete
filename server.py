@@ -156,22 +156,11 @@ def get_detailed_stats():
         import database
         days = request.args.get('days', 7, type=int)
         
-        daily_stats = database.get_daily_stats(days)
-        top_routes = database.get_top_routes(days, 5)
-        airline_stats = database.get_airline_stats(days, 1000)
-        hourly_stats = database.get_hourly_stats(days, 1000)
-        kpi_stats = database.get_kpi_stats(days)
-        customer_stats = database.get_customer_stats(days)
-        
-        return jsonify({
-            'daily': daily_stats,
-            'top_routes': top_routes,
-            'airlines': airline_stats,
-            'hourly': hourly_stats,
-            'kpi': kpi_stats,
-            'customers': customer_stats
-        })
+        # Use optimized single-query aggregation to reduce latency on Render
+        stats = database.get_detailed_stats_aggregated(days)
+        return jsonify(stats)
     except Exception as e:
+        print(f"Stats Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/history/export', methods=['GET'])
