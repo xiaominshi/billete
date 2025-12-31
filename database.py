@@ -5,7 +5,11 @@ from sqlalchemy.pool import NullPool
 
 # Detect environment: Render uses DATABASE_URL
 # Handle "postgres://" fix for SQLAlchemy 1.4+
-db_url = os.getenv("DATABASE_URL", "sqlite:///billete.db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(BASE_DIR, "billete.db")
+default_db_url = f"sqlite:///{db_path}"
+
+db_url = os.getenv("DATABASE_URL", default_db_url)
 # Normalize legacy scheme
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -18,7 +22,8 @@ if db_url.startswith("postgresql://") or db_url.startswith("postgresql+"):
         poolclass=NullPool
     )
 else:
-    engine = create_engine(db_url)
+    # Increase timeout for SQLite to avoid "database is locked" errors
+    engine = create_engine(db_url, connect_args={'timeout': 30})
 metadata = MetaData()
 
 # Define tables using SQLAlchemy Core for cross-db compatibility
@@ -43,29 +48,32 @@ def init_db():
     metadata.create_all(engine)
     # Auto-migration for existing DBs
     dialect = engine.dialect.name
-    with engine.connect() as conn:
+    
+    # Define migration steps as separate operations
+    columns_to_add = [
+        ("cost", "TEXT"),
+        ("price", "TEXT"),
+        ("data_json", "TEXT")
+    ]
+    
+    for col_name, col_type in columns_to_add:
         try:
-            if dialect == "postgresql":
-                conn.execute(text("ALTER TABLE history ADD COLUMN IF NOT EXISTS cost TEXT"))
-            else:
-                conn.execute(text("ALTER TABLE history ADD COLUMN cost TEXT"))
-        except Exception:
-            pass
-        try:
-            if dialect == "postgresql":
-                conn.execute(text("ALTER TABLE history ADD COLUMN IF NOT EXISTS price TEXT"))
-            else:
-                conn.execute(text("ALTER TABLE history ADD COLUMN price TEXT"))
-        except Exception:
-            pass
-        try:
-            if dialect == "postgresql":
-                conn.execute(text("ALTER TABLE history ADD COLUMN IF NOT EXISTS data_json TEXT"))
-            else:
-                conn.execute(text("ALTER TABLE history ADD COLUMN data_json TEXT"))
-        except Exception:
-            pass
-        conn.commit()
+            # Use engine.begin() to create a fresh transaction for EACH column
+            # This ensures if one fails (e.g. column exists), others still run.
+            # And avoids the "current transaction is aborted" error in Postgres.
+            with engine.begin() as conn:
+                try:
+                    if dialect == "postgresql":
+                        conn.execute(text(f"ALTER TABLE history ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
+                    else:
+                        # SQLite doesn't support IF NOT EXISTS in ADD COLUMN consistently across versions
+                        conn.execute(text(f"ALTER TABLE history ADD COLUMN {col_name} {col_type}"))
+                except Exception as e:
+                    # Ignore error only if it's likely "column exists"
+                    # But print it for debugging
+                    print(f"Migration note for {col_name}: {e}")
+        except Exception as outer_e:
+            print(f"Transaction error during migration for {col_name}: {outer_e}")
 
 def create_user(username, password_hash):
     try:
@@ -176,33 +184,46 @@ def get_history_entries(limit=100):
         return history
 
 def add_history_entry(code, result, passenger_info, route_info, timestamp=None, cost=None, price=None, data_json=None):
+    print(f"DEBUG: add_history_entry called. Code len: {len(code) if code else 0}")
     if not timestamp:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-    with engine.connect() as conn:
-        # Deduplication: Remove old entries with the same input code to keep only the latest
-        conn.execute(
-            text("DELETE FROM history WHERE code = :code"),
-            {"code": code}
-        )
-        
-        conn.execute(
-            text('''
-                INSERT INTO history (timestamp, code, result, passenger_info, route_info, cost, price, data_json)
-                VALUES (:timestamp, :code, :result, :passenger_info, :route_info, :cost, :price, :data_json)
-            '''),
-            {
-                "timestamp": timestamp,
-                "code": code,
-                "result": result,
-                "passenger_info": passenger_info,
-                "route_info": route_info,
-                "cost": cost,
-                "price": price,
-                "data_json": data_json
-            }
-        )
-        conn.commit()
+    # Pre-process None values to prevent SQL NULL injection errors
+    vals = {
+        "timestamp": timestamp,
+        "code": code if code else "",
+        "result": result if result else "",
+        "passenger_info": passenger_info if passenger_info else "",
+        "route_info": route_info if route_info else "",
+        "cost": cost if cost is not None else "",
+        "price": price if price is not None else "",
+        "data_json": data_json if data_json is not None else "{}"
+    }
+
+    try:
+        # Use engine.begin() for atomic transaction management
+        with engine.begin() as conn:
+            # 1. Deduplication REMOVED to prevent locking and ensure history preservation
+            # if code:
+            #     conn.execute(text("DELETE FROM history WHERE code = :code"), {"code": code})
+            
+            # 2. Insert new record
+            conn.execute(
+                text('''
+                    INSERT INTO history (timestamp, code, result, passenger_info, route_info, cost, price, data_json)
+                    VALUES (:timestamp, :code, :result, :passenger_info, :route_info, :cost, :price, :data_json)
+                '''),
+                vals
+            )
+            # Transaction is automatically committed here
+            print(f"DEBUG: Successfully added history for code length: {len(code) if code else 0}")
+            return True
+            
+    except Exception as e:
+        print(f"CRITICAL DB ERROR in add_history_entry: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def update_history_entry(history_id, cost=None, price=None, data_json=None):
     with engine.connect() as conn:

@@ -124,22 +124,34 @@ class Logic:
     def get_today_count(self):
         return database.get_today_count()
 
-    def save_to_history(self, code, result, passenger_info="", route_info="", cost=None, price=None, data_json=None):
+    def save_to_history(self, code, result, passenger_info="", route_info="", cost=None, price=None, data_json="{}"):
         try:
             # Must use keyword arguments to avoid positional mismatch with timestamp
-            database.add_history_entry(
-                code, 
-                result, 
-                passenger_info, 
-                route_info, 
-                cost=cost, 
-                price=price, 
+            
+            # Ensure data_json is not None
+            if data_json is None:
+                data_json = "{}"
+                
+            success = database.add_history_entry(
+                code=code, 
+                result=result, 
+                passenger_info=passenger_info, 
+                route_info=route_info, 
+                timestamp=None, # Explicitly pass None for timestamp to let DB/function handle it
+                cost=cost if cost is not None else "", 
+                price=price if price is not None else "", 
                 data_json=data_json
             )
+            
+            if not success:
+                self.log("Database save returned False (Silent Failure)")
+                
         except Exception as e:
             self.log(f"Error saving history: {e}")
 
     def merge_lines_without_sequence_number(self, text):
+        # Normalize newlines first to handle various input formats (CRLF, CR -> LF)
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
         lines = text.split("\n")
         output = []
         previous_line = None
@@ -149,8 +161,34 @@ class Logic:
             if not line:
                 continue
                 
-            # Check if line starts with a number (e.g., "1.", "1 ", "14")
-            if re.match(r'^\d+.*', line):
+            # Improved heuristic:
+            # 1. Starts with digit followed by dot or space -> New Line (e.g. "1. ", "10 ")
+            # 2. Contains "SSR" or "FA PAX" -> Usually New Line (even if no digit in some formats)
+            # 3. Contains Month (e.g. 13MAR) -> Likely a flight line -> New Line
+            # Otherwise -> Merge to previous
+            
+            is_new_line = False
+            # Strict regex: Number followed by dot or space
+            if re.match(r'^\d+(\.|\s)', line):
+                is_new_line = True
+            elif "SSR" in line or "FA PAX" in line:
+                is_new_line = True
+            elif self.contain_month(line):
+                is_new_line = True
+            
+            # Special Handling for Continuation Lines that might look like new lines
+            # If a line contains /S (segment ref) or /P (passenger ref) or /ET (ticket type), 
+            # it is likely a continuation of an FA PAX line, even if it has a line number.
+            # We strip the line number if present and merge.
+            if previous_line and ("FA PAX" in previous_line or "SSR" in previous_line):
+                # Check for continuation markers
+                if re.search(r'/[SP]\d', line) or "/ET" in line:
+                     is_new_line = False
+                     # If it started with a number, we might want to strip it, 
+                     # but simple merging usually works if regex parsing is robust.
+                     # Let's keep it simple: Force merge.
+            
+            if is_new_line:
                 if previous_line is not None:
                     output.append(previous_line)
                 previous_line = line

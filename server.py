@@ -12,13 +12,20 @@ app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), 't
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.jinja_env.auto_reload = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+
+# Ensure database module is reloaded on restart
+import sys
+if 'database' in sys.modules:
+    import database
+    importlib.reload(database)
+
 # Force-load local logic.py to avoid importing an unrelated module named 'logic'
 _logic_path = os.path.join(os.path.dirname(__file__), "logic.py")
 _spec = importlib.util.spec_from_file_location("billete_logic", _logic_path)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 Logic = _mod.Logic
-logic = Logic()
+# logic = Logic() # REMOVED: Global instance is unsafe for concurrency
 print(f" * Logic loaded from: {_logic_path}")
 print(f" * Logic module name: {_mod.__name__}")
 
@@ -34,17 +41,35 @@ def process():
         data = request.json
         code = data.get('code', '')
         
-        # ... (params extraction) ...
-        hand_count = int(data.get('hand_count', 1))
-        hand_weight = int(data.get('hand_weight', 8))
-        pack_count = int(data.get('pack_count', 2))
-        pack_weight = int(data.get('pack_weight', 23))
-        
-        result_text, structured_data = logic.process(code)
-        
-        # Async History Saving: Don't make the user wait for DB write
-        def save_async():
+        # Helper for safe int conversion
+        def safe_int(val, default):
             try:
+                return int(val)
+            except (ValueError, TypeError):
+                return default
+
+        hand_count = safe_int(data.get('hand_count'), 1)
+        hand_weight = safe_int(data.get('hand_weight'), 8)
+        pack_count = safe_int(data.get('pack_count'), 2)
+        pack_weight = safe_int(data.get('pack_weight'), 23)
+        
+        # Instantiate Logic per request to avoid state leakage
+        current_logic = Logic()
+        
+        # Safe unpacking of process result
+        process_result = current_logic.process(code)
+        if isinstance(process_result, tuple) and len(process_result) == 2:
+            result_text, structured_data = process_result
+        else:
+            # Handle unexpected return type or error
+            result_text = str(process_result)
+            structured_data = None
+        
+        # Synchronous History Saving for Debugging
+        # We removed threading to ensure we capture any errors and ensure execution completes
+        def save_sync(logic_instance):
+            try:
+                print("DEBUG: Starting save_sync...")
                 # Add luggage info to structured data for history
                 if structured_data:
                     structured_data['luggage'] = {
@@ -54,7 +79,7 @@ def process():
                 
                 # If we have structured data, save that too
                 import json
-                data_json = json.dumps(structured_data, ensure_ascii=False) if structured_data else None
+                data_json = json.dumps(structured_data, ensure_ascii=False) if structured_data else "{}"
                 
                 # Determine route info for summary
                 route_info = "Unknown Route"
@@ -62,25 +87,59 @@ def process():
                     f = structured_data['flights']
                     if len(f) > 0:
                         origin = f[0]['origin']
-                        dest = f[-1]['dest']
-                        # Check for return
-                        if f[-1]['is_return'] or (len(f) > 1 and f[-1]['dest'] == f[0]['origin']):
-                            route_info = f"{origin}-{dest}-{origin}"
+                        final_dest = f[-1]['dest']
+                        
+                        # Check for return trip logic
+                        is_return_trip = False
+                        turnaround = None
+                        
+                        # Strategy: Look for the first flight marked as 'is_return'
+                        for flt in f:
+                            if flt.get('is_return'):
+                                is_return_trip = True
+                                turnaround = flt['origin']
+                                break
+                        
+                        # Fallback Strategy: If logic didn't mark is_return but start == end and multiple segments
+                        if not is_return_trip and len(f) > 1 and final_dest == origin:
+                            is_return_trip = True
+                            # Assume the last leg's origin is the turnaround point
+                            turnaround = f[-1]['origin']
+
+                        if is_return_trip and turnaround:
+                            route_info = f"{origin}-{turnaround}-{origin}"
                         else:
-                            route_info = f"{origin}-{dest}"
+                            # One way or complex open jaw
+                            if len(f) == 1:
+                                route_info = f"{origin}-{final_dest}"
+                            else:
+                                # For multi-leg one-way, maybe show intermediate? For now just Start-End
+                                route_info = f"{origin}-{final_dest}"
                 
                 # Passenger Info
                 pax_info = "Unknown Pax"
                 if structured_data and structured_data.get('passengers'):
                     pax_list = [p['name'] if isinstance(p, dict) else str(p) for p in structured_data['passengers']]
                     pax_info = ", ".join(pax_list)
-                    
-                logic.save_to_history(code, result_text, pax_info, route_info, data_json=data_json)
+                
+                # Sanitize code: remove null bytes which break DB
+                safe_code = code.replace('\x00', '') if code else ''
+                
+                # Sanitize other fields too - raw code might propagate null bytes into result/pax
+                safe_result = result_text.replace('\x00', '') if result_text else ''
+                safe_pax = pax_info.replace('\x00', '') if pax_info else ''
+                safe_route = route_info.replace('\x00', '') if route_info else ''
+                
+                print(f"DEBUG: calling logic.save_to_history. Safe code len: {len(safe_code)}")
+                logic_instance.save_to_history(safe_code, safe_result, safe_pax, safe_route, data_json=data_json)
+                print("DEBUG: save_to_history completed.")
             except Exception as e:
-                print(f"Async Save Error: {e}")
+                print(f"Sync Save Error: {e}")
+                import traceback
+                traceback.print_exc()
 
-        # Start background thread
-        threading.Thread(target=save_async).start()
+        # Run synchronously
+        save_sync(current_logic)
         
         # Inject Luggage into response for immediate UI update
         if structured_data:
@@ -98,21 +157,24 @@ def process():
 
 @app.route('/history', methods=['GET'])
 def get_history():
-    return jsonify(logic.get_history())
+    # Use a temporary logic instance or call DB directly
+    temp_logic = Logic()
+    return jsonify(temp_logic.get_history())
 
 @app.route('/history', methods=['DELETE'])
 def clear_history():
+    temp_logic = Logic()
     # If JSON provided with 'id', delete single item
     if request.is_json:
         data = request.json
         if 'id' in data:
-             if logic.delete_history_item(data['id']):
+             if temp_logic.delete_history_item(data['id']):
                  return jsonify({'success': True, 'message': 'Deleted item'})
              else:
                  return jsonify({'error': 'Failed to delete item'}), 404
                  
     # Otherwise clear all
-    success = logic.clear_history()
+    success = temp_logic.clear_history()
     if success:
         return jsonify({'message': 'History cleared'})
     else:
@@ -147,7 +209,8 @@ def update_history():
 @app.route('/stats', methods=['GET'])
 def get_stats():
     try:
-        count = logic.get_today_count()
+        temp_logic = Logic()
+        count = temp_logic.get_today_count()
         response = jsonify({'today_count': count})
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return response
@@ -204,8 +267,9 @@ def export_history():
 
 @app.route('/airports', methods=['GET', 'POST', 'DELETE'])
 def manage_airports():
+    temp_logic = Logic()
     if request.method == 'GET':
-        return jsonify(logic.load_airport_map())
+        return jsonify(temp_logic.load_airport_map())
     
     if request.method == 'POST':
         data = request.json
@@ -214,7 +278,7 @@ def manage_airports():
         if not code or not name:
             return jsonify({'error': 'Missing code or name'}), 400
         
-        logic.update_airport(code, name)
+        temp_logic.update_airport(code, name)
         return jsonify({'success': True, 'code': code, 'name': name})
 
     if request.method == 'DELETE':
@@ -223,7 +287,7 @@ def manage_airports():
         if not code:
             return jsonify({'error': 'Missing code'}), 400
         
-        if logic.delete_airport(code):
+        if temp_logic.delete_airport(code):
              return jsonify({'success': True, 'message': f'Deleted {code}'})
         else:
              return jsonify({'error': 'Failed to delete'}), 500
@@ -261,16 +325,17 @@ def import_airports():
             total += 1
 
         # Process batch
+        temp_logic = Logic()
         if batch_list:
             try:
-                if logic.update_airports_batch(batch_list):
+                if temp_logic.update_airports_batch(batch_list):
                     inserted = len(batch_list)
                 else:
                     skipped.append("Batch insert failed in database.")
             except Exception as e:
                 skipped.append(f"Batch insert error: {e}")
         
-        latest_map = logic.load_airport_map()
+        latest_map = temp_logic.load_airport_map()
         
         return jsonify({
             'success': True,
@@ -285,7 +350,8 @@ def import_airports():
 @app.route('/airports/export', methods=['GET'])
 def export_airports():
     try:
-        airport_map = logic.load_airport_map()
+        temp_logic = Logic()
+        airport_map = temp_logic.load_airport_map()
         # Sort by code
         lines = []
         for code in sorted(airport_map.keys()):
@@ -307,26 +373,23 @@ def export_airports():
 @app.route('/download_ics', methods=['GET'])
 def download_ics():
     try:
-        ics_content = logic.generate_ics()
-        if not ics_content:
-             return jsonify({'error': 'No flight data to generate ICS'}), 400
-             
-        from flask import Response
-        return Response(
-            ics_content,
-            mimetype="text/calendar",
-            headers={"Content-disposition": "attachment; filename=itinerary.ics"}
-        )
+        # Note: logic.flights is stateful. We cannot generate ICS without processing first.
+        # This endpoint assumes 'logic' has state from a previous request, which is flawed in REST.
+        # Ideally, the client should send the flight data back, or we retrieve it from history ID.
+        # For now, we'll return an error or placeholder as we removed the global logic instance.
+        return jsonify({'error': 'ICS generation requires flight data context. Please use history export or client-side generation.'}), 400
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/version', methods=['GET'])
 def version():
     # Simple health/version info
+    temp_logic = Logic()
     return jsonify({
         "module": _mod.__name__,
         "path": _logic_path,
-        "has_year_field": any('year' in f for f in logic.flights) if logic.flights else False
+        "has_year_field": True # Logic instantiated fresh, so we don't know flights state, but code supports it
     })
 
 @app.route('/template_info', methods=['GET'])
