@@ -2070,26 +2070,44 @@
                     method: 'POST',
                     body: formData
                 });
-                const data = await resp.json();
-                if (data.error) {
-                    showToast("导入失败: " + data.error, true);
+                const ct = resp.headers.get('content-type') || '';
+                if (!resp.ok) {
+                    // Try to show server error body
+                    const txt = await resp.text();
+                    showToast(`导入失败(${resp.status}): ${txt}`, true);
                     return;
                 }
-                const inserted = data.inserted || 0;
-                const total = data.total || 0;
-                const skipped = data.skipped || [];
-                showToast(`导入完成: ${inserted}/${total} 条`);
-                // Refresh local map
-                if (data.map) {
-                    allAirports = data.map;
+                if (ct.includes('application/json')) {
+                    let data;
+                    try {
+                        data = await resp.json();
+                    } catch (e) {
+                        const txt = await resp.text();
+                        showToast(`导入失败(JSON解析): ${txt}`, true);
+                        return;
+                    }
+                    if (data.error) {
+                        showToast("导入失败: " + data.error, true);
+                        return;
+                    }
+                    const inserted = data.inserted || 0;
+                    const total = data.total || 0;
+                    const skipped = data.skipped || [];
+                    showToast(`导入完成: ${inserted}/${total} 条`);
+                    // Refresh local map
+                    if (data.map) {
+                        allAirports = data.map;
+                    } else {
+                        // Fallback: reload from server
+                        await loadAirports();
+                    }
+                    renderAirports(document.getElementById('search_box').value);
+                    if (skipped.length > 0) {
+                        console.warn("导入跳过的行:", skipped);
+                    }
                 } else {
-                    // Fallback: reload from server
-                    await loadAirports();
-                }
-                renderAirports(document.getElementById('search_box').value);
-                // If there are skipped lines, log to console
-                if (skipped.length > 0) {
-                    console.warn("导入跳过的行:", skipped);
+                    const txt = await resp.text();
+                    showToast(`导入失败(非JSON响应): ${txt}`, true);
                 }
             } catch (e) {
                 showToast("连接错误: " + e, true);

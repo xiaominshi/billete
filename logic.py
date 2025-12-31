@@ -94,37 +94,11 @@ class Logic:
 
     def resolve_airport(self, code):
         """
-        Resolve airport code to name using 3 levels:
-        1. Local fly.txt (Priority)
-        2. Offline airportsdata DB (Fast, English)
-        3. Online Scraping (Slow, Fallback for Chinese)
+        Resolve airport code to name using database only.
         """
         code = code.upper()
-
-        # 1. Local
         if code in self.airport_map:
             return self.airport_map[code]
-
-        # 2. Offline DB (English Fallback) - MOVED UP for performance
-        if code in self.airports_db:
-             data = self.airports_db[code]
-             city = data.get('city', '')
-             name = data.get('name', '')
-             final_name = city if city else name
-
-             self.log(f"Found offline (English): {code} -> {final_name}")
-             self.update_airport(code, final_name)
-             return final_name
-
-        # 3. Online Chinese Fallback (Preferred for Language but SLOW)
-        # Only reached if not in local map AND not in offline DB
-        online_name = self.fetch_online_airport_name(code)
-        if online_name:
-             self.log(f"Found online (Chinese): {code} -> {online_name}")
-             self.update_airport(code, online_name)
-             return online_name
-
-        # Not found
         return code
 
     def get_history(self):
@@ -504,6 +478,11 @@ class Logic:
         self.flights = []
         self.layovers = []
         self.fa_pax_count = 0 # Track how many FA PAX lines we've seen for sequential assignment fallback
+        # Ensure airport map is up-to-date from DB
+        try:
+            self.reload_airport_map()
+        except Exception as e:
+            self.log(f"Reload airport map failed: {e}")
         
         # Determine year context before parsing flights
         # Check all months in the raw code first

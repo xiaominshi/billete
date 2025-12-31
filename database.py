@@ -6,10 +6,19 @@ from sqlalchemy.pool import NullPool
 # Detect environment: Render uses DATABASE_URL
 # Handle "postgres://" fix for SQLAlchemy 1.4+
 db_url = os.getenv("DATABASE_URL", "sqlite:///billete.db")
+# Normalize legacy scheme
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(db_url)
+# Use resilient settings for Neon/PostgreSQL
+if db_url.startswith("postgresql://") or db_url.startswith("postgresql+"):
+    engine = create_engine(
+        db_url,
+        pool_pre_ping=True,
+        poolclass=NullPool
+    )
+else:
+    engine = create_engine(db_url)
 metadata = MetaData()
 
 # Define tables using SQLAlchemy Core for cross-db compatibility
@@ -33,16 +42,29 @@ history_table = Table('history', metadata,
 def init_db():
     metadata.create_all(engine)
     # Auto-migration for existing DBs
+    dialect = engine.dialect.name
     with engine.connect() as conn:
         try:
-            conn.execute(text("ALTER TABLE history ADD COLUMN cost String"))
-        except Exception: pass
+            if dialect == "postgresql":
+                conn.execute(text("ALTER TABLE history ADD COLUMN IF NOT EXISTS cost TEXT"))
+            else:
+                conn.execute(text("ALTER TABLE history ADD COLUMN cost TEXT"))
+        except Exception:
+            pass
         try:
-            conn.execute(text("ALTER TABLE history ADD COLUMN price String"))
-        except Exception: pass
+            if dialect == "postgresql":
+                conn.execute(text("ALTER TABLE history ADD COLUMN IF NOT EXISTS price TEXT"))
+            else:
+                conn.execute(text("ALTER TABLE history ADD COLUMN price TEXT"))
+        except Exception:
+            pass
         try:
-            conn.execute(text("ALTER TABLE history ADD COLUMN data_json String"))
-        except Exception: pass
+            if dialect == "postgresql":
+                conn.execute(text("ALTER TABLE history ADD COLUMN IF NOT EXISTS data_json TEXT"))
+            else:
+                conn.execute(text("ALTER TABLE history ADD COLUMN data_json TEXT"))
+        except Exception:
+            pass
         conn.commit()
 
 def create_user(username, password_hash):

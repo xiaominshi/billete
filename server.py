@@ -338,6 +338,18 @@ def template_info():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/db/health', methods=['GET'])
+def db_health():
+    try:
+        import database
+        from sqlalchemy import text as sq_text
+        dialect = database.engine.dialect.name
+        with database.engine.connect() as conn:
+            ok = conn.execute(sq_text("SELECT 1")).scalar()
+        return jsonify({"dialect": dialect, "ok": bool(ok)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     # Optional: Open ngrok tunnel if command line argument provided
     use_ngrok = len(sys.argv) > 1 and sys.argv[1] == '--public'
