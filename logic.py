@@ -182,11 +182,13 @@ class Logic:
             # We strip the line number if present and merge.
             if previous_line and ("FA PAX" in previous_line or "SSR" in previous_line):
                 # Check for continuation markers
-                if re.search(r'/[SP]\d', line) or "/ET" in line:
-                     is_new_line = False
-                     # If it started with a number, we might want to strip it, 
-                     # but simple merging usually works if regex parsing is robust.
-                     # Let's keep it simple: Force merge.
+                # CRITICAL FIX: Only merge if the current line itself is NOT a new FA PAX or SSR line
+                if not ("FA PAX" in line or "SSR" in line):
+                    if re.search(r'/[SP]\d', line) or "/ET" in line:
+                         is_new_line = False
+                         # If it started with a number, we might want to strip it, 
+                         # but simple merging usually works if regex parsing is robust.
+                         # Let's keep it simple: Force merge.
             
             if is_new_line:
                 if previous_line is not None:

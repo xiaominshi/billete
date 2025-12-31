@@ -203,9 +203,10 @@ def add_history_entry(code, result, passenger_info, route_info, timestamp=None, 
     try:
         # Use engine.begin() for atomic transaction management
         with engine.begin() as conn:
-            # 1. Deduplication REMOVED to prevent locking and ensure history preservation
-            # if code:
-            #     conn.execute(text("DELETE FROM history WHERE code = :code"), {"code": code})
+            # 1. Deduplication (Enabled)
+            # Delete old record with the same code to ensure only the latest version is stored
+            if vals['code']:
+                conn.execute(text("DELETE FROM history WHERE code = :code"), {"code": vals['code']})
             
             # 2. Insert new record
             conn.execute(
@@ -543,7 +544,8 @@ def get_customer_stats(days=30, limit=50):
             
             # Extract valid passenger indices from code (e.g. /P1, /P2 in FA PAX lines)
             # Find all FA PAX lines
-            fa_pax_matches = re.findall(r'FA PAX.*?/P(\d+)', code_text)
+            # Use re.DOTALL to handle cases where /P is on the next line (indentation)
+            fa_pax_matches = re.findall(r'FA PAX.*?/P(\d+)', code_text, re.DOTALL)
             valid_indices = set()
             if fa_pax_matches:
                 valid_indices = {int(idx) for idx in fa_pax_matches}
@@ -721,7 +723,8 @@ def get_detailed_stats_aggregated(days=7):
                  # Extract names
                 lines = [l for l in p_info.split('\n') if l.strip()]
                 # Find valid indices if possible
-                fa_pax_matches = re.findall(r'FA PAX.*?/P(\d+)', code)
+                # Use re.DOTALL to match across lines (e.g. FA PAX ... \n ... /P1)
+                fa_pax_matches = re.findall(r'FA PAX.*?/P(\d+)', code, re.DOTALL)
                 valid_indices = {int(idx) for idx in fa_pax_matches} if fa_pax_matches else set()
                 
                 for i, line in enumerate(lines):
