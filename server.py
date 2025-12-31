@@ -75,11 +75,94 @@ def login():
             
     return render_template('login.html')
 
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    from flask import session, render_template, request
+    import database
+    from sqlalchemy import text
+    
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if new_password != confirm_password:
+            return render_template('change_password.html', error="New passwords do not match")
+            
+        username = session.get('username')
+        user = database.get_user_by_username(username)
+        
+        if not user:
+            return render_template('change_password.html', error="User not found")
+            
+        # Verify current password (support both hash and plain text)
+        is_valid = False
+        try:
+            if check_password_hash(user['password_hash'], current_password):
+                is_valid = True
+        except:
+            pass
+            
+        if not is_valid and user['password_hash'] == current_password:
+            is_valid = True
+            
+        if not is_valid:
+            return render_template('change_password.html', error="Incorrect current password")
+            
+        # Update password
+        new_hash = generate_password_hash(new_password)
+        try:
+            with database.engine.connect() as conn:
+                conn.execute(
+                    text("UPDATE users SET password_hash = :pwd WHERE id = :uid"),
+                    {"pwd": new_hash, "uid": user['id']}
+                )
+                conn.commit()
+            return render_template('change_password.html', success="Password updated successfully!")
+        except Exception as e:
+            return render_template('change_password.html', error=f"Database error: {str(e)}")
+            
+    return render_template('change_password.html')
+
 @app.route('/logout')
 def logout():
     from flask import session, redirect, url_for
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/register', methods=['GET', 'POST'])
+@login_required
+def register():
+    from flask import session, redirect, url_for, flash
+    import database
+    
+    # Only 'admin' can access this page
+    if session.get('username') != 'admin':
+        return "Access Denied: Admin privileges required.", 403
+        
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if not username or not password:
+            return render_template('register.html', error="Username and password are required")
+            
+        if database.get_user_by_username(username):
+            return render_template('register.html', error=f"User '{username}' already exists")
+            
+        # Store as plain text if using the fallback compatibility mode, 
+        # OR use hash if you want to enforce security. 
+        # Given previous context, let's use hash but our login logic now supports both.
+        # Ideally we use hash.
+        password_hash = generate_password_hash(password)
+        
+        if database.create_user(username, password_hash):
+            return render_template('register.html', success=f"User '{username}' created successfully!")
+        else:
+            return render_template('register.html', error="Database error")
+            
+    return render_template('register.html')
 
 @app.route('/')
 @login_required
