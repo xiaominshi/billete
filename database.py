@@ -249,12 +249,21 @@ def delete_old_history(days=30):
     
     try:
         with engine.connect() as conn:
-            result = conn.execute(
-                text("DELETE FROM history WHERE timestamp < :cutoff"),
-                {"cutoff": cutoff_str}
-            )
+            # Only delete if NOT issued (no 'FA PAX' in code) AND no financial data (cost/price empty)
+            # Logic: timestamp < cutoff AND code NOT LIKE '%FA PAX%' AND (cost IS NULL OR cost = '') AND (price IS NULL OR price = '')
+            # Note: Checking cost/price strings.
+            
+            sql = text('''
+                DELETE FROM history 
+                WHERE timestamp < :cutoff 
+                  AND (code NOT LIKE '%FA PAX%')
+                  AND (cost IS NULL OR cost = '' OR cost = '0')
+                  AND (price IS NULL OR price = '' OR price = '0')
+            ''')
+            
+            result = conn.execute(sql, {"cutoff": cutoff_str})
             conn.commit()
-            print(f"Deleted {result.rowcount} old history entries (older than {days} days).")
+            print(f"Deleted {result.rowcount} old history entries (older than {days} days, non-issued only).")
             return result.rowcount
     except Exception as e:
         print(f"Failed to delete old history: {e}")
@@ -783,5 +792,5 @@ def get_detailed_stats_aggregated(days=7):
 
 # Initialize on import
 init_db()
-# Auto-cleanup removed to preserve history
-# delete_old_history(30)
+# Auto-cleanup on startup (keep 30 days of SEARCH history, preserve issued)
+delete_old_history(30)
