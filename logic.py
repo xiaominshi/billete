@@ -556,11 +556,19 @@ class Logic:
                     self.parse_flight(parts)
 
             self.calculate_layovers()
-            return self.generate_text()
+            
+            # Construct structured data for return
+            structured_data = {
+                'passengers': self.passengers,
+                'flights': self.flights,
+                'layovers': self.layovers
+            }
+            
+            return self.generate_text(), structured_data
             
         except Exception as e:
             self.log(f"Critical error in process: {e}")
-            return f"Error processing: {e}"
+            return f"Error processing: {e}", None
 
     def generate_text(self):
         res = ""

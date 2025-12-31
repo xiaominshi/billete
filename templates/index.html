@@ -1278,37 +1278,6 @@
             
             let res = "";
             
-            // Header & Luggage (Added back)
-            if (data.luggage) {
-                // "Economy Round Trip"
-                res += `${t.vc_eco_round || 'Economy Round Trip'}\n`; 
-                
-                // Checked Luggage: "托运行李2 件,每件23公斤"
-                // Construct string manually to match user request format closely
-                // t.checked_luggage usually has colon "🧳 托运:", we strip it for cleaner text if needed, 
-                // but user asked for "托运行李..."
-                // Let's use a cleaner format:
-                const checkLabel = lang === 'zh' ? "托运行李" : (t.checked_luggage || "Checked");
-                const handLabel = lang === 'zh' ? "手提行李" : (t.hand_luggage || "Hand");
-                const unit = t.unit_piece || "pcs";
-                const perPiece = lang === 'zh' ? ",每件" : ", each ";
-                
-                // Checked
-                res += `${checkLabel}${data.luggage.pack_count} ${unit}${perPiece}${data.luggage.pack_weight}kg\n`;
-                
-                // Hand
-                // "手提行李1件8 公斤" -> Note: user didn't say "per piece" here but usually implied.
-                // If count is 1, maybe omit "per piece"?
-                let handWeightStr = `${data.luggage.hand_weight}kg`;
-                if (data.luggage.hand_count > 1) {
-                    handWeightStr = `${perPiece}${data.luggage.hand_weight}kg`;
-                } else {
-                     // For 1 piece, user example: "手提行李1件8 公斤"
-                     handWeightStr = `${data.luggage.hand_weight} kg`;
-                }
-                res += `${handLabel}${data.luggage.hand_count} ${unit} ${handWeightStr}\n\n`;
-            }
-            
             // Passengers
             data.passengers.forEach((p, idx) => {
                 const name = p.name || p; // Support object or string
@@ -1349,6 +1318,28 @@
                     res += `${layStr}\n`;
                 }
             });
+            
+            // Luggage Info (Moved to bottom per request)
+            if (data.luggage) {
+                res += `\n${t.vc_eco_round || 'Economy Round Trip'}\n`; 
+                
+                const checkLabel = lang === 'zh' ? "托运行李" : (t.checked_luggage || "Checked");
+                const handLabel = lang === 'zh' ? "手提行李" : (t.hand_luggage || "Hand");
+                const unit = t.unit_piece || "pcs";
+                const perPiece = lang === 'zh' ? ",每件" : ", each ";
+                
+                // Checked
+                res += `${checkLabel}${data.luggage.pack_count} ${unit}${perPiece}${data.luggage.pack_weight}kg\n`;
+                
+                // Hand
+                let handWeightStr = `${data.luggage.hand_weight}kg`;
+                if (data.luggage.hand_count > 1) {
+                    handWeightStr = `${perPiece}${data.luggage.hand_weight}kg`;
+                } else {
+                     handWeightStr = `${data.luggage.hand_weight} kg`;
+                }
+                res += `${handLabel}${data.luggage.hand_count} ${unit} ${handWeightStr}\n`;
+            }
             
             return res;
         }
