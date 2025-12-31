@@ -26,70 +26,74 @@ print(f" * Logic module name: {_mod.__name__}")
 def home():
     return render_template('index.html')
 
+import threading
+
 @app.route('/process', methods=['POST'])
 def process():
     try:
         data = request.json
         code = data.get('code', '')
-        if not code:
-            return jsonify({'error': 'No code provided'}), 400
-            
-        # Use logic to process (source text)
-        # logic.process() returns the formatted text string
-        result_text = logic.process(code)
         
-        # Append Luggage
-        hand_count = data.get('hand_count', '1')
-        hand_weight = data.get('hand_weight', '8')
-        pack_count = data.get('pack_count', '2')
-        pack_weight = data.get('pack_weight', '23')
+        # ... (params extraction) ...
+        hand_count = int(data.get('hand_count', 1))
+        hand_weight = int(data.get('hand_weight', 8))
+        pack_count = int(data.get('pack_count', 2))
+        pack_weight = int(data.get('pack_weight', 23))
         
-        luggage_info = f"\n经济舱往返 欧\n托运行李{pack_count} 件,每件{pack_weight}公斤\n手提行李{hand_count}件{hand_weight} 公斤\n"
-        final_result = result_text + luggage_info
+        result_text, structured_data = logic.process(code)
         
-        # If result is suspiciously empty (only luggage), append debug logs
-        if not result_text.strip() and logic.logs:
-             final_result += "\n\n[Debug Logs (Render Fix)]:\n" + "\n".join(logic.logs)
-        
-        # Construct route string for history
-        route_str = ""
-        if logic.flights:
-            if len(logic.flights) == 1:
-                route_str = f"{logic.flights[0]['origin']}-{logic.flights[0]['dest']}"
-            else:
-                full_path = [logic.flights[0]['origin']]
-                for f in logic.flights:
-                    full_path.append(f['dest'])
-                route_str = "-".join(full_path)
+        # Async History Saving: Don't make the user wait for DB write
+        def save_async():
+            try:
+                # Add luggage info to structured data for history
+                if structured_data:
+                    structured_data['luggage'] = {
+                        'hand_count': hand_count, 'hand_weight': hand_weight,
+                        'pack_count': pack_count, 'pack_weight': pack_weight
+                    }
+                
+                # If we have structured data, save that too
+                import json
+                data_json = json.dumps(structured_data, ensure_ascii=False) if structured_data else None
+                
+                # Determine route info for summary
+                route_info = "Unknown Route"
+                if structured_data and structured_data.get('flights'):
+                    f = structured_data['flights']
+                    if len(f) > 0:
+                        origin = f[0]['origin']
+                        dest = f[-1]['dest']
+                        # Check for return
+                        if f[-1]['is_return'] or (len(f) > 1 and f[-1]['dest'] == f[0]['origin']):
+                            route_info = f"{origin}-{dest}-{origin}"
+                        else:
+                            route_info = f"{origin}-{dest}"
+                
+                # Passenger Info
+                pax_info = "Unknown Pax"
+                if structured_data and structured_data.get('passengers'):
+                    pax_list = [p['name'] if isinstance(p, dict) else str(p) for p in structured_data['passengers']]
+                    pax_info = ", ".join(pax_list)
+                    
+                logic.save_to_history(code, result_text, pax_info, route_info, data_json=data_json)
+            except Exception as e:
+                print(f"Async Save Error: {e}")
 
-        # Extract passengers string for history
-        pax_names = [p['name'] for p in logic.passengers]
-        pax_str = ", ".join(pax_names)
-
-        # Save to history
-        import json
-        structured_data = {
-            'passengers': logic.passengers,
-            'flights': logic.flights,
-            'layovers': logic.layovers,
-            'luggage': {
+        # Start background thread
+        threading.Thread(target=save_async).start()
+        
+        # Inject Luggage into response for immediate UI update
+        if structured_data:
+            structured_data['luggage'] = {
                 'hand_count': hand_count,
                 'hand_weight': hand_weight,
                 'pack_count': pack_count,
                 'pack_weight': pack_weight
             }
-        }
-        data_json = json.dumps(structured_data)
-
-        logic.save_to_history(code, final_result, pax_str, route_str, data_json=data_json)
-        
-        return jsonify({
-            'result': final_result,
-            'structured': structured_data
-        })
+            
+        return jsonify({'result': result_text, 'structured': structured_data})
 
     except Exception as e:
-        print(f"Error in process: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/history', methods=['GET'])
