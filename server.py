@@ -247,6 +247,7 @@ def import_airports():
         total = 0
         inserted = 0
         skipped = []
+        batch_list = []
         
         for raw_line in content.splitlines():
             line = raw_line.strip()
@@ -261,13 +262,20 @@ def import_airports():
             if not code or not name:
                 skipped.append(f"Missing code or name: {raw_line}")
                 continue
+            
+            # Add to batch list
+            batch_list.append({"code": code, "name": name})
+            total += 1
+
+        # Process batch
+        if batch_list:
             try:
-                logic.update_airport(code, name)
-                inserted += 1
+                if logic.update_airports_batch(batch_list):
+                    inserted = len(batch_list)
+                else:
+                    skipped.append("Batch insert failed in database.")
             except Exception as e:
-                skipped.append(f"DB error for {code}: {e}")
-            finally:
-                total += 1
+                skipped.append(f"Batch insert error: {e}")
         
         latest_map = logic.load_airport_map()
         

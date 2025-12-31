@@ -121,6 +121,27 @@ def upsert_airport(code, name):
         conn.execute(sql, {"code": code.upper(), "name": name})
         conn.commit()
 
+def upsert_airports_batch(airports_list):
+    """
+    Batch insert/update airports in a single transaction.
+    airports_list: list of dicts [{"code": "ABC", "name": "Airport Name"}, ...]
+    """
+    if not airports_list:
+        return True
+
+    sql = text('''
+        INSERT INTO airports (code, name) VALUES (:code, :name)
+        ON CONFLICT(code) DO UPDATE SET name=excluded.name
+    ''')
+    
+    try:
+        with engine.begin() as conn: # Begin transaction
+            conn.execute(sql, airports_list)
+        return True
+    except Exception as e:
+        print(f"Batch Upsert Error: {e}")
+        return False
+
 def delete_airport(code):
     try:
         with engine.connect() as conn:

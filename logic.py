@@ -50,6 +50,17 @@ class Logic:
         database.upsert_airport(code, name)
         self.airport_map[code] = name
 
+    def update_airports_batch(self, airports_list):
+        """
+        Updates multiple airports in batch.
+        airports_list: list of dicts [{"code": "ABC", "name": "Name"}]
+        """
+        if database.upsert_airports_batch(airports_list):
+            for item in airports_list:
+                self.airport_map[item['code']] = item['name']
+            return True
+        return False
+
     def delete_airport(self, code):
         """Removes an airport from the database and local map."""
         if database.delete_airport(code):
