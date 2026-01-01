@@ -143,6 +143,34 @@ def update_user_password(username, password_hash):
         print(f"Update Password Error: {e}")
         return False
 
+def delete_user(username):
+    """
+    Delete a user by username.
+    Prevents deleting 'admin'.
+    """
+    if username == 'admin':
+        return False
+        
+    try:
+        with engine.connect() as conn:
+            # Optional: Delete history first? Or keep it?
+            # Keeping history but setting user_id to NULL or keeping as is (orphan)
+            # Let's set to NULL to preserve data stats
+            # First get ID
+            user = conn.execute(text("SELECT id FROM users WHERE username = :u"), {"u": username}).fetchone()
+            if user:
+                conn.execute(text("UPDATE history SET user_id = NULL WHERE user_id = :uid"), {"uid": user.id})
+            
+            result = conn.execute(
+                text("DELETE FROM users WHERE username = :username"),
+                {"username": username}
+            )
+            conn.commit()
+            return result.rowcount > 0
+    except Exception as e:
+        print(f"Delete User Error: {e}")
+        return False
+
 
 def get_user_by_id(user_id):
     with engine.connect() as conn:

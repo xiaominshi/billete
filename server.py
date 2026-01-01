@@ -607,6 +607,32 @@ def admin_reset_password():
         
     return redirect(url_for('admin_users'))
 
+@app.route('/admin/delete_user', methods=['POST'])
+@login_required
+def admin_delete_user():
+    from flask import session, request, redirect, url_for, flash
+    import database
+    
+    if session.get('username') != 'admin':
+        return "Access Denied: Admin privileges required.", 403
+        
+    username = request.form.get('username')
+    
+    if not username:
+        flash("Missing username")
+        return redirect(url_for('admin_users'))
+        
+    if username == 'admin':
+        flash("Cannot delete admin user!")
+        return redirect(url_for('admin_users'))
+        
+    if database.delete_user(username):
+        flash(f"User '{username}' deleted successfully")
+    else:
+        flash(f"Failed to delete user '{username}'")
+        
+    return redirect(url_for('admin_users'))
+
 if __name__ == '__main__':
     # Optional: Open ngrok tunnel if command line argument provided
     use_ngrok = len(sys.argv) > 1 and sys.argv[1] == '--public'
