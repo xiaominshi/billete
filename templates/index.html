@@ -867,6 +867,30 @@
                
             </div>
         </div>
+
+        <!-- Card 4: Financials -->
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom: 2px solid var(--border); padding-bottom: 10px;">
+                <h3 style="margin:0; border:none;">💰 财务管理 (Financials)</h3>
+                <button class="btn btn-small btn-secondary" onclick="openImportFinancials()" style="width:auto;">📥 导入数据 (Import)</button>
+            </div>
+            <div id="financial_list" class="list-container" style="max-height: 400px;">
+                <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading financials...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Financials Modal -->
+    <div id="financialModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <span class="close-modal" onclick="closeFinancialModal()">&times;</span>
+            <h3 style="margin-top:0;">📥 导入成本/售价数据</h3>
+            <p style="font-size:12px; color:#666;">请粘贴制表符分隔的文本 (从Excel复制)。格式: 出票日期 | LOC | ... | 票号 | ... | 成本 | ... | 售价 | 利润</p>
+            <textarea id="financial_text" style="height: 300px; font-family: monospace; font-size: 11px; white-space: pre;" placeholder="在此粘贴文本..."></textarea>
+            <div style="margin-top:15px; text-align:right;">
+                <button class="btn" onclick="submitFinancials()">🚀 开始导入</button>
+            </div>
+        </div>
     </div>
 
     <!-- Toast Notification Element -->
@@ -1505,13 +1529,96 @@
             document.getElementById('vc-date').innerText = new Date().toLocaleDateString();
         }
 
-        let allAirports = {};
+        // --- Financials ---
+    function openImportFinancials() {
+        document.getElementById('financialModal').style.display = 'block';
+        document.getElementById('financial_text').focus();
+    }
+    
+    function closeFinancialModal() {
+        document.getElementById('financialModal').style.display = 'none';
+    }
+    
+    function submitFinancials() {
+        const text = document.getElementById('financial_text').value;
+        if(!text.trim()) {
+            showToast("请粘贴内容!", true);
+            return;
+        }
+        
+        showLoading("Importing Financials...");
+        fetch('/import/financials', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text: text})
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                showToast(`导入成功: ${data.inserted} 条记录, 跳过 ${data.skipped} 条`);
+                closeFinancialModal();
+                document.getElementById('financial_text').value = ''; // Clear
+                loadFinancials();
+            } else {
+                showToast(`导入失败: ${data.message || data.error}`, true);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast("网络错误", true);
+        })
+        .finally(() => hideLoading());
+    }
+    
+    function loadFinancials() {
+        fetch('/financials')
+        .then(res => res.json())
+        .then(data => {
+            const list = document.getElementById('financial_list');
+            if(!data || data.length === 0) {
+                list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">暂无数据 (No Data)</div>';
+                return;
+            }
+            
+            let html = '<table style="width:100%; font-size:12px; border-collapse: collapse;">';
+            html += '<tr style="background:#F9FAFB; text-align:left; color:#6B7280;">' + 
+                    '<th style="padding:8px;">Date</th>' + 
+                    '<th style="padding:8px;">LOC</th>' + 
+                    '<th style="padding:8px;">Ticket No.</th>' + 
+                    '<th style="padding:8px;">Passenger</th>' + 
+                    '<th style="padding:8px;">Cost</th>' + 
+                    '<th style="padding:8px;">Price</th>' + 
+                    '<th style="padding:8px;">Profit</th>' + 
+                    '</tr>';
+                    
+            data.forEach(item => {
+                html += `<tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:8px;">${item.issue_date || '-'}</td>
+                    <td style="padding:8px; font-weight:500;">${item.loc || '-'}</td>
+                    <td style="padding:8px; font-family:monospace; color:#4F46E5;">${item.ticket_number}</td>
+                    <td style="padding:8px;">${item.passenger || '-'}</td>
+                    <td style="padding:8px; color:#EF4444;">${item.cost || '-'}</td>
+                    <td style="padding:8px; color:#10B981;">${item.price || '-'}</td>
+                    <td style="padding:8px; font-weight:bold;">${item.profit || '-'}</td>
+                </tr>`;
+            });
+            html += '</table>';
+            list.innerHTML = html;
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById('financial_list').innerHTML = '<div style="color:red; padding:20px;">Load Error</div>';
+        });
+    }
 
-        // Load on start
-        window.addEventListener('load', () => {
-            loadAirports();
-            loadHistory();
-            loadStats();
+    let allAirports = {};
+
+    // Load on start
+    window.addEventListener('load', () => {
+        loadAirports();
+        loadHistory();
+        loadStats();
+        loadFinancials(); // Load financials on start
             
             // Restore Language
             const savedLang = localStorage.getItem('billete_lang') || 'zh';

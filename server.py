@@ -421,6 +421,81 @@ def export_history():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/financials', methods=['GET'])
+@login_required
+def get_financials():
+    from flask import session
+    import database
+    current_user_id = session.get('user_id')
+    data = database.get_financials(user_id=current_user_id)
+    return jsonify(data)
+
+@app.route('/import/financials', methods=['POST'])
+@login_required
+def import_financials():
+    try:
+        from flask import session
+        import database
+        import datetime
+        
+        current_user_id = session.get('user_id')
+        text_data = request.json.get('text', '')
+        
+        if not text_data:
+            return jsonify({'error': 'No text provided'}), 400
+            
+        records = []
+        lines = text_data.split('\n')
+        now_ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        skipped = 0
+        inserted = 0
+        
+        for line in lines:
+            line = line.strip()
+            if not line: continue
+            
+            # Split by tab
+            cols = line.split('\t')
+            if len(cols) < 12: # Check minimum columns based on template
+                skipped += 1
+                continue
+                
+            # Extract fields based on provided template indices
+            # 0:Date, 1:LOC, 2:Airline, 3:Start, 4:End, 5:Ticket(Key), 6:Passport, 7:Passenger, 8:Cost, 9:Comm, 10:Price, 11:Profit
+            try:
+                ticket_number = cols[5].strip()
+                if not ticket_number or ticket_number == '票号': # Skip header
+                    continue
+                    
+                record = {
+                    "issue_date": cols[0].strip(),
+                    "loc": cols[1].strip(),
+                    "ticket_number": ticket_number,
+                    "passenger": cols[7].strip(),
+                    "cost": cols[8].strip(),
+                    "price": cols[10].strip(),
+                    "profit": cols[11].strip(),
+                    "user_id": current_user_id,
+                    "timestamp": now_ts
+                }
+                records.append(record)
+                inserted += 1
+            except Exception as e:
+                print(f"Parse error line: {line} -> {e}")
+                skipped += 1
+                
+        if records:
+            if database.upsert_financial_records(records):
+                return jsonify({'success': True, 'inserted': inserted, 'skipped': skipped})
+            else:
+                return jsonify({'error': 'Database error during upsert'}), 500
+        else:
+            return jsonify({'success': False, 'message': 'No valid records found', 'skipped': skipped})
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/airports', methods=['GET', 'POST', 'DELETE'])
 def manage_airports():
     temp_logic = Logic()

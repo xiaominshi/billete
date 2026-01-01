@@ -38,6 +38,19 @@ airports_table = Table('airports', metadata,
     Column('name', String, nullable=False)
 )
 
+financials_table = Table('financials', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('ticket_number', String, unique=True, nullable=False),
+    Column('loc', String),
+    Column('passenger', String),
+    Column('cost', String),
+    Column('price', String),
+    Column('profit', String),
+    Column('issue_date', String),
+    Column('user_id', Integer, nullable=True),
+    Column('timestamp', String)
+)
+
 history_table = Table('history', metadata,
     Column('id', Integer, primary_key=True),
     Column('user_id', Integer), # Foreign key to users
@@ -95,6 +108,69 @@ def init_db():
     except Exception as e:
         print(f"Migration error assigning history to admin: {e}")
 
+def upsert_financial_records(records):
+    """
+    Batch upsert financial records.
+    records: list of dicts with keys: ticket_number, loc, passenger, cost, price, profit, issue_date, user_id, timestamp
+    """
+    if not records:
+        return True
+        
+    try:
+        with engine.begin() as conn:
+            for rec in records:
+                # Check if exists
+                existing = conn.execute(
+                    text("SELECT id FROM financials WHERE ticket_number = :tn"),
+                    {"tn": rec['ticket_number']}
+                ).fetchone()
+                
+                if existing:
+                    # Update
+                    conn.execute(
+                        text('''
+                            UPDATE financials 
+                            SET loc=:loc, passenger=:passenger, cost=:cost, price=:price, 
+                                profit=:profit, issue_date=:issue_date, user_id=:user_id, timestamp=:timestamp
+                            WHERE id=:id
+                        '''),
+                        {**rec, "id": existing.id}
+                    )
+                else:
+                    # Insert
+                    conn.execute(
+                        text('''
+                            INSERT INTO financials (ticket_number, loc, passenger, cost, price, profit, issue_date, user_id, timestamp)
+                            VALUES (:ticket_number, :loc, :passenger, :cost, :price, :profit, :issue_date, :user_id, :timestamp)
+                        '''),
+                        rec
+                    )
+        return True
+    except Exception as e:
+        print(f"Financial Upsert Error: {e}")
+        return False
+
+def get_financials(limit=500, user_id=None):
+    with engine.connect() as conn:
+        sql = "SELECT * FROM financials"
+        params = {"limit": limit}
+        if user_id:
+            sql += " WHERE user_id = :user_id"
+            params["user_id"] = user_id
+        sql += " ORDER BY id DESC LIMIT :limit"
+        
+        result = conn.execute(text(sql), params)
+        return [{
+            "id": row.id,
+            "ticket_number": row.ticket_number,
+            "loc": row.loc,
+            "passenger": row.passenger,
+            "cost": row.cost,
+            "price": row.price,
+            "profit": row.profit,
+            "issue_date": row.issue_date,
+            "timestamp": row.timestamp
+        } for row in result]
 
 def create_user(username, password_hash):
     try:
