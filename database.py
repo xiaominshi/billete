@@ -119,6 +119,31 @@ def get_user_by_username(username):
             return {"id": result.id, "username": result.username, "password_hash": result.password_hash}
         return None
 
+def get_all_users():
+    """
+    Get list of all users.
+    """
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT id, username FROM users ORDER BY id ASC"))
+        return [{"id": row.id, "username": row.username} for row in result]
+
+def update_user_password(username, password_hash):
+    """
+    Update password for a specific user.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("UPDATE users SET password_hash = :password_hash WHERE username = :username"),
+                {"password_hash": password_hash, "username": username}
+            )
+            conn.commit()
+            return result.rowcount > 0
+    except Exception as e:
+        print(f"Update Password Error: {e}")
+        return False
+
+
 def get_user_by_id(user_id):
     with engine.connect() as conn:
         result = conn.execute(

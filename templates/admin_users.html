@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Billete</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338ca;
+            --bg: #F3F4F6;
+            --card-bg: #ffffff;
+            --text-main: #1F2937;
+            --text-muted: #6B7280;
+            --border: #E5E7EB;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 12px;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: var(--primary);
+            text-align: center;
+            font-weight: 600;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background-color: #64748B;
+        }
+
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+
+        .btn-danger {
+            background-color: #EF4444;
+        }
+        
+        .btn-danger:hover {
+            background-color: #DC2626;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background-color: #F9FAFB;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 25px;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 400px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-modal:hover {
+            color: #000;
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            margin: 10px 0 20px;
+            box-sizing: border-box;
+        }
+
+        .alert {
+            padding: 10px;
+            background-color: #DEF7EC;
+            color: #03543F;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <a href="/" class="btn btn-secondary">← Back to Dashboard</a>
+            <h1>👥 User Management</h1>
+            <div style="width: 100px;"></div> <!-- Spacer -->
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>Registered Users</h3>
+                <a href="/register" class="btn">➕ Add New User</a>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.id }}</td>
+                        <td>
+                            <span style="font-weight: 500;">{{ user.username }}</span>
+                            {% if user.username == 'admin' %}
+                                <span style="font-size: 10px; background: #EEF2FF; color: #4F46E5; padding: 2px 6px; border-radius: 4px; margin-left: 5px;">ADMIN</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button onclick="openResetModal('{{ user.username }}')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                                🔑 Reset Password
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div id="resetModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h3 style="margin-top:0;">Reset Password</h3>
+            <p>Reset password for user: <b id="targetUser"></b></p>
+            
+            <form action="/admin/reset_password" method="POST">
+                <input type="hidden" name="username" id="usernameInput">
+                
+                <label for="new_password">New Password</label>
+                <input type="text" name="new_password" id="new_password" placeholder="Enter new password" required autocomplete="off">
+                
+                <button type="submit" class="btn" style="width: 100%;">Update Password</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openResetModal(username) {
+            document.getElementById('targetUser').innerText = username;
+            document.getElementById('usernameInput').value = username;
+            document.getElementById('new_password').value = ''; // Clear previous input
+            document.getElementById('resetModal').style.display = 'block';
+            document.getElementById('new_password').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('resetModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('resetModal')) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>

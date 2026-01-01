@@ -570,6 +570,43 @@ def db_health():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/admin/users', methods=['GET'])
+@login_required
+def admin_users():
+    from flask import session, render_template
+    import database
+    
+    if session.get('username') != 'admin':
+        return "Access Denied: Admin privileges required.", 403
+        
+    users = database.get_all_users()
+    return render_template('admin_users.html', users=users)
+
+@app.route('/admin/reset_password', methods=['POST'])
+@login_required
+def admin_reset_password():
+    from flask import session, request, redirect, url_for, flash
+    import database
+    
+    if session.get('username') != 'admin':
+        return "Access Denied: Admin privileges required.", 403
+        
+    username = request.form.get('username')
+    new_password = request.form.get('new_password')
+    
+    if not username or not new_password:
+        flash("Missing username or password")
+        return redirect(url_for('admin_users'))
+        
+    password_hash = generate_password_hash(new_password)
+    
+    if database.update_user_password(username, password_hash):
+        flash(f"Password reset successfully for user: {username}")
+    else:
+        flash(f"Failed to reset password for user: {username}")
+        
+    return redirect(url_for('admin_users'))
+
 if __name__ == '__main__':
     # Optional: Open ngrok tunnel if command line argument provided
     use_ngrok = len(sys.argv) > 1 and sys.argv[1] == '--public'
