@@ -279,8 +279,10 @@ def process():
                 import traceback
                 traceback.print_exc()
 
-        # Run synchronously
-        save_sync(current_logic)
+        # Run asynchronously to speed up response
+        save_thread = threading.Thread(target=save_sync, args=(current_logic,))
+        save_thread.start()
+        # save_sync(current_logic)
         
         # Inject Luggage into response for immediate UI update
         if structured_data:
