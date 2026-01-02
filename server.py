@@ -28,6 +28,10 @@ _spec = importlib.util.spec_from_file_location("billete_logic", _logic_path)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 Logic = _mod.Logic
+# Initialize the global cache for Logic module immediately
+if hasattr(_mod, 'init_global_cache'):
+    _mod.init_global_cache()
+
 # logic = Logic() # REMOVED: Global instance is unsafe for concurrency
 print(f" * Logic loaded from: {_logic_path}")
 print(f" * Logic module name: {_mod.__name__}")

@@ -8,6 +8,33 @@ import airportsdata
 from bs4 import BeautifulSoup
 import database
 
+# Global Cache for heavy airport data
+_GLOBAL_AIRPORT_DB = {}
+_GLOBAL_AIRPORT_MAP = {}
+_GLOBAL_CACHE_LOADED = False
+
+def init_global_cache():
+    global _GLOBAL_AIRPORT_DB, _GLOBAL_AIRPORT_MAP, _GLOBAL_CACHE_LOADED
+    if _GLOBAL_CACHE_LOADED:
+        return
+
+    print(" * Loading global airport cache...")
+    try:
+        _GLOBAL_AIRPORT_DB = airportsdata.load('IATA')
+        print(f" * Loaded {_GLOBAL_AIRPORT_DB.__len__()} IATA airports.")
+    except Exception as e:
+        print(f" * Failed to load airportsdata: {e}")
+        _GLOBAL_AIRPORT_DB = {}
+
+    try:
+        _GLOBAL_AIRPORT_MAP = database.get_all_airports()
+        print(f" * Loaded {_GLOBAL_AIRPORT_MAP.__len__()} custom airport mappings.")
+    except Exception as e:
+        print(f" * Failed to load DB airports: {e}")
+        _GLOBAL_AIRPORT_MAP = {}
+    
+    _GLOBAL_CACHE_LOADED = True
+
 class Logic:
     def __init__(self):
         self.logs = []
@@ -17,21 +44,15 @@ class Logic:
         self.base_year = datetime.datetime.now().year
         self.current_year = self.base_year
         self.last_month = None
-        self.airports_db = {}
         
-        try:
-             self.airports_db = airportsdata.load('IATA')
-        except Exception as e:
-            self.log(f"Failed to load airportsdata: {e}")
-            self.airports_db = {}
+        # Use Global Cache if available, otherwise fallback (lazy load)
+        global _GLOBAL_CACHE_LOADED, _GLOBAL_AIRPORT_DB, _GLOBAL_AIRPORT_MAP
+        if not _GLOBAL_CACHE_LOADED:
+            init_global_cache()
+            
+        self.airports_db = _GLOBAL_AIRPORT_DB
+        self.airport_map = _GLOBAL_AIRPORT_MAP
         
-        # Initialize map from DB
-        try:
-             self.airport_map = database.get_all_airports()
-        except Exception as e:
-             self.log(f"Failed to load DB airports: {e}")
-             self.airport_map = {}
-
     def log(self, msg):
         # Store log in memory to display in result if needed
         self.logs.append(str(msg))
