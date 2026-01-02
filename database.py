@@ -30,7 +30,8 @@ metadata = MetaData()
 users_table = Table('users', metadata,
     Column('id', Integer, primary_key=True),
     Column('username', String, unique=True, nullable=False),
-    Column('password_hash', String, nullable=False)
+    Column('password_hash', String, nullable=False),
+    Column('qr_code', String)
 )
 
 airports_table = Table('airports', metadata,
@@ -92,6 +93,19 @@ def init_db():
                     pass
         except Exception as outer_e:
             pass
+
+    # Migration for users table
+    try:
+        with engine.begin() as conn:
+            try:
+                if dialect == "postgresql":
+                    conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS qr_code TEXT"))
+                else:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN qr_code TEXT"))
+            except Exception as e:
+                pass
+    except Exception as e:
+        pass
 
     # Ensure admin user exists
     from werkzeug.security import generate_password_hash
@@ -255,8 +269,30 @@ def get_user_by_id(user_id):
             {"user_id": user_id}
         ).fetchone()
         if result:
-            return {"id": result.id, "username": result.username, "password_hash": result.password_hash}
+            qr = getattr(result, 'qr_code', None)
+            return {
+                "id": result.id, 
+                "username": result.username, 
+                "password_hash": result.password_hash,
+                "qr_code": qr
+            }
         return None
+
+def update_user_qr_code(user_id, qr_code_path):
+    """
+    Update the QR code path for a user.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("UPDATE users SET qr_code = :qr_code WHERE id = :user_id"),
+                {"qr_code": qr_code_path, "user_id": user_id}
+            )
+            conn.commit()
+            return result.rowcount > 0
+    except Exception as e:
+        print(f"Update QR Code Error: {e}")
+        return False
 
 def get_all_airports():
     with engine.connect() as conn:

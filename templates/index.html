@@ -648,6 +648,35 @@
             </div>
         </div>
 
+    <div class="main-container">
+        <!-- Card 5: User Settings / QR Code (Moved to Top) -->
+        <div class="card">
+             <div style="display: flex; justify-content: space-between; align-items: center;">
+                 <h3 data-i18n="settings_title" style="margin:0;">⚙️ 设置 (Settings)</h3>
+                 <button class="btn btn-small btn-secondary" style="width:auto;" onclick="toggleSettings()">🔽 展开/收起</button>
+             </div>
+             
+             <div id="settings-content" style="display: none; gap: 20px; align-items: center; padding: 10px; margin-top:10px;">
+                 <div style="flex: 0 0 100px; text-align: center;">
+                     <img id="setting-qr-img" 
+                          src="{{ qr_code_url if qr_code_url else '/static/qrcode.jpg' }}" 
+                          style="width: 80px; height: 80px; object-fit: contain; border: 1px solid #ddd; padding: 2px; border-radius: 4px; cursor: pointer;" 
+                          onclick="document.getElementById('setting_qr_upload').click()"
+                          title="点击更换二维码 (Click to change)" />
+                     <input type="file" id="setting_qr_upload" accept="image/*" style="display: none;" onchange="uploadQRCode(this)" />
+                     <div style="font-size: 12px; margin-top: 5px; color: #666;">我的二维码</div>
+                 </div>
+                 <div>
+                     <div style="font-weight: 600; margin-bottom: 5px;">自定义二维码</div>
+                     <div style="font-size: 13px; color: #666; margin-bottom: 10px;">
+                         上传您的微信二维码图片。它将显示在生成的行程单上。
+                         <br>点击左侧图片即可上传。
+                     </div>
+                     <button class="btn btn-small btn-secondary" onclick="document.getElementById('setting_qr_upload').click()">📤 上传新图片</button>
+                 </div>
+             </div>
+        </div>
+
         <!-- Issued Orders Modal -->
         <div id="issuedModal" class="modal">
             <div class="modal-content">
@@ -730,7 +759,7 @@
                                 <div style="font-size: 13px; opacity: 0.8;" id="vc-date"></div>
                             </div>
                             <div style="text-align: center;">
-                                <img id="vc-qr-img" src="/static/qrcode.jpg" 
+                                <img id="vc-qr-img" src="{{ qr_code_url if qr_code_url else '/static/qrcode.jpg' }}" 
                                     style="width: 60px; height: 60px; object-fit: contain; border-radius: 4px;" 
                                     alt="QR" />
                                 <div style="font-size: 8px; color: white; opacity: 0.9; margin-top: 2px;">Weixin</div>
@@ -905,6 +934,15 @@
     <div id="toast">Some message..</div>
 
     <script>
+        function toggleSettings() {
+            const content = document.getElementById('settings-content');
+            if (content.style.display === 'none') {
+                content.style.display = 'flex';
+            } else {
+                content.style.display = 'none';
+            }
+        }
+        
         // --- Loading Overlay Logic ---
         function showLoading(text="Processing...") {
             const overlay = document.getElementById('loadingOverlay');
@@ -2920,6 +2958,49 @@
             }).catch(err => {
                 showToast("复制失败", true);
             });
+        }
+
+        async function uploadQRCode(input) {
+            if (!input.files || !input.files[0]) return;
+            
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            showLoading("上传二维码...");
+            
+            try {
+                const response = await fetch('/user/upload_qr', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    // Update image source
+                    const img = document.getElementById('vc-qr-img');
+                    if (img) {
+                        img.src = result.url;
+                    }
+                    // Update setting image too
+                    const settingImg = document.getElementById('setting-qr-img');
+                    if (settingImg) {
+                        settingImg.src = result.url;
+                    }
+                    
+                    showToast("二维码更新成功!");
+                } else {
+                    showToast(result.error || "上传失败", true);
+                }
+            } catch (e) {
+                console.error(e);
+                showToast("上传出错: " + e.message, true);
+            } finally {
+                hideLoading();
+                // Clear input
+                input.value = '';
+            }
         }
 
         // Init theme

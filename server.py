@@ -172,7 +172,64 @@ def register():
 @login_required
 def home():
     from flask import session
-    return render_template('index.html', username=session.get('username'))
+    import database
+    user_id = session.get('user_id')
+    user = database.get_user_by_id(user_id)
+    qr_code = user.get('qr_code') if user else None
+    return render_template('index.html', username=session.get('username'), qr_code_url=qr_code)
+
+@app.route('/user/upload_qr', methods=['POST'])
+@login_required
+def upload_qr():
+    from flask import session, request, jsonify
+    import database
+    import os
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+        
+    if file:
+        user_id = session.get('user_id')
+        # Create directory if not exists
+        # static is sibling to templates
+        base_dir = os.path.dirname(__file__)
+        upload_folder = os.path.join(base_dir, 'static', 'qrcodes')
+        
+        if not os.path.exists(upload_folder):
+            try:
+                os.makedirs(upload_folder)
+            except Exception as e:
+                print(f"Error creating dir: {e}")
+            
+        # Save file with user_id to prevent collisions and easily overwrite
+        _, ext = os.path.splitext(file.filename)
+        if not ext: ext = '.png' # Default extension
+        
+        filename = f"{user_id}_qrcode{ext}"
+        filepath = os.path.join(upload_folder, filename)
+        
+        try:
+            file.save(filepath)
+        except Exception as e:
+            return jsonify({'error': f'Failed to save file: {str(e)}'}), 500
+        
+        # Relative path for frontend
+        relative_path = f"/static/qrcodes/{filename}"
+        
+        # Update cache busting query param
+        import time
+        relative_path_with_ts = f"{relative_path}?t={int(time.time())}"
+        
+        # Store base path in DB (without query param usually, but frontend needs to refresh)
+        # Better store clean path in DB, add TS in frontend or here when returning
+        if database.update_user_qr_code(user_id, relative_path):
+            return jsonify({'success': True, 'url': relative_path_with_ts})
+        else:
+            return jsonify({'error': 'Database update failed'}), 500
 
 import threading
 
