@@ -503,21 +503,24 @@
             <h1 style="margin: 0;">✈️ LULI Web Service ✈️</h1>
             <div style="width: 150px; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
                 {% if username %}
-                <div style="font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 8px; background: white; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <div style="font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 8px; background: var(--card-bg); padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                     <span style="font-weight: 600;">👤 {{ username }}</span>
                     {% if username == 'admin' %}
-                    <a href="/register" style="color: #10B981; text-decoration: none; font-size: 12px; border-left: 1px solid #E5E7EB; padding-left: 8px;" title="Register User">➕</a>
-                    <a href="/admin/users" style="color: #3B82F6; text-decoration: none; font-size: 12px; border-left: 1px solid #E5E7EB; padding-left: 8px;" title="Manage Users">👥</a>
+                    <a href="/register" style="color: #10B981; text-decoration: none; font-size: 12px; border-left: 1px solid var(--border); padding-left: 8px;" title="Register User">➕</a>
+                    <a href="/admin/users" style="color: #3B82F6; text-decoration: none; font-size: 12px; border-left: 1px solid var(--border); padding-left: 8px;" title="Manage Users">👥</a>
                     {% endif %}
-                    <a href="/change_password" style="color: #4F46E5; text-decoration: none; font-size: 12px; border-left: 1px solid #E5E7EB; padding-left: 8px;" title="Change Password">🔑</a>
-                    <a href="/logout" style="color: #EF4444; text-decoration: none; font-size: 12px; border-left: 1px solid #E5E7EB; padding-left: 8px;" title="Sign Out">退出 ➜</a>
+                    <a href="/change_password" style="color: #4F46E5; text-decoration: none; font-size: 12px; border-left: 1px solid var(--border); padding-left: 8px;" title="Change Password">🔑</a>
+                    <a href="/logout" style="color: #EF4444; text-decoration: none; font-size: 12px; border-left: 1px solid var(--border); padding-left: 8px;" title="Sign Out">退出 ➜</a>
                 </div>
                 {% endif %}
-                <select id="langSelect" onchange="switchLanguage(this.value)" style="padding: 4px; border-radius: 6px; border: 1px solid #E5E7EB; font-size: 12px;">
-                    <option value="zh">🇨🇳 中文</option>
-                    <option value="en">🇺🇸 English</option>
-                    <option value="es">🇪🇸 Español</option>
-                </select>
+                <div style="display:flex; gap:5px;">
+                    <button id="themeBtn" onclick="toggleTheme()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #E5E7EB; background: var(--card-bg); color: var(--text-main); cursor: pointer;" title="Toggle Dark Mode">🌙</button>
+                    <select id="langSelect" onchange="switchLanguage(this.value)" style="padding: 4px; border-radius: 6px; border: 1px solid #E5E7EB; font-size: 12px;">
+                        <option value="zh">🇨🇳 中文</option>
+                        <option value="en">🇺🇸 English</option>
+                        <option value="es">🇪🇸 Español</option>
+                    </select>
+                </div>
             </div>
         </div>
         
@@ -814,6 +817,11 @@
                     <button id="generateImageBtn" onclick="generateImage()" class="btn btn-secondary"
                         style="background-color: #10B981; width:auto; display: flex; align-items: center; gap: 5px;" data-i18n="img_btn">
                         <span>📸</span> 生成图片
+                    </button>
+                    <button id="copyWechatBtn" class="btn btn-copy"
+                        style="margin-top:0; width:auto; display: flex; align-items: center; gap: 5px; background-color: #07C160;"
+                        onclick="copyWeChatResult()">
+                        <span>💬</span> 微信格式
                     </button>
                     <button id="copyBtn" class="btn btn-copy"
                         style="margin-top:0; width:auto; display: flex; align-items: center; gap: 5px;"
@@ -2775,7 +2783,40 @@
         }
 
         function downloadCalendar() {
-            window.location.href = '/download_ics';
+            if (!lastProcessedData || !lastProcessedData.flights) {
+                showToast("Please process flight code first!", true);
+                return;
+            }
+
+            let icsContent = [
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "PRODID:-//Billete//Flight Itinerary//EN"
+            ];
+
+            lastProcessedData.flights.forEach(f => {
+                if (f.utc_start && f.utc_end) {
+                    icsContent.push("BEGIN:VEVENT");
+                    icsContent.push(`SUMMARY:Flight ${f.id} ${f.origin}-${f.dest}`);
+                    icsContent.push(`DTSTART:${f.utc_start}`);
+                    icsContent.push(`DTEND:${f.utc_end}`);
+                    icsContent.push(`DESCRIPTION:Flight ${f.id} from ${f.origin} to ${f.dest}`);
+                    icsContent.push(`LOCATION:${f.origin}`);
+                    icsContent.push(`UID:${f.id}-${f.utc_start}@billete.local`);
+                    icsContent.push("END:VEVENT");
+                }
+            });
+
+            icsContent.push("END:VCALENDAR");
+
+            const blob = new Blob([icsContent.join("\r\n")], { type: 'text/calendar;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = "flight_itinerary.ics";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("Calendar file downloaded!");
         }
 
         function copyResult() {
@@ -2803,6 +2844,93 @@
                 showToast("Failed to paste (Permission denied?)", true);
             }
         }
+
+        // --- Theme Logic ---
+        function toggleTheme() {
+            const html = document.documentElement;
+            const current = html.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('billete_theme', next);
+            updateThemeIcon(next);
+        }
+
+        function updateThemeIcon(theme) {
+            const btn = document.getElementById('themeBtn');
+            if(btn) btn.innerText = theme === 'dark' ? '☀️' : '🌙';
+        }
+
+        // --- WeChat Logic ---
+        function copyWeChatResult() {
+            if (!lastProcessedData) {
+                showToast("Please process flight code first!", true);
+                return;
+            }
+            
+            const data = lastProcessedData;
+            let res = "✈️ 行程确认单 / Flight Itinerary\n";
+            res += "--------------------------------\n";
+            
+            // Pax
+            data.passengers.forEach((p, idx) => {
+                const name = p.name || p;
+                res += `👤 乘客 ${idx+1}: ${name}\n`;
+                if(p.ticket) res += `🎫 票号: ${p.ticket}\n`;
+            });
+            res += "\n";
+            
+            // Flights
+            data.flights.forEach((f, idx) => {
+                // Check return
+                const layover = (data.layovers || []).find(l => l.flight_index === idx);
+                if (layover && layover.type === 'return_split') {
+                    res += "🔄 --- 回程 / Return ---\n\n";
+                }
+                
+                res += `📅 ${f.month}月${f.day}日 (日期: ${f.month}-${f.day})\n`;
+                res += `🛫 ${f.origin} -> ${f.dest} 🛬\n`;
+                res += `⏰ ${f.start} 起飞 - ${f.end} 到达${f.next_day ? ' (+1)' : ''}\n`;
+                res += `✈️ 航班: ${f.id}\n`;
+                
+                if (layover && layover.type === 'layover') {
+                    res += `⏳ 中转: ${layover.hours}小时${layover.minutes}分\n`;
+                }
+                res += "\n";
+            });
+            
+            // Luggage
+            if (data.luggage) {
+                 res += "🧳 行李额度:\n";
+                 res += `   托运: ${data.luggage.pack_count}件 x ${data.luggage.pack_weight}kg\n`;
+                 res += `   手提: ${data.luggage.hand_count}件 x ${data.luggage.hand_weight}kg\n`;
+            }
+
+            // Terms
+            const termsContent = document.getElementById('terms').value;
+            if (termsContent && termsContent.trim()) {
+                res += "\n📝 条款 / Terms:\n";
+                res += termsContent.trim() + "\n";
+            }
+            
+            res += "--------------------------------\n";
+            res += "🌍 祝您旅途愉快! Have a nice trip!";
+            
+            navigator.clipboard.writeText(res).then(() => {
+                showToast("已复制微信格式! 💬");
+            }).catch(err => {
+                showToast("复制失败", true);
+            });
+        }
+
+        // Init theme
+        (function() {
+            const saved = localStorage.getItem('billete_theme') || 'light';
+            document.documentElement.setAttribute('data-theme', saved);
+            // Defer icon update until DOM load
+            window.addEventListener('DOMContentLoaded', () => {
+                updateThemeIcon(saved);
+            });
+        })();
     </script>
 </body>
 
