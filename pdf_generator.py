@@ -87,6 +87,32 @@ def generate_pdf(data, qr_code_path=None):
     #    # Draw text logo removed per request
     #    c.setFont(FONT_NAME, 24)
     #    c.drawString(2*cm, height - 2.5*cm, "BILLETE")
+    
+    # --- Header QR Code (Top-Left) ---
+    qr_size = 2.5 * cm
+    qr_x = 2 * cm
+    qr_y = height - 1 * cm - qr_size  # 从顶部往下
+
+    if qr_code_path and qr_code_path.startswith('data:image'):
+        try:
+            import base64
+            header, encoded = qr_code_path.split(",", 1)
+            qr_bytes = base64.b64decode(encoded)
+
+            temp_qr = "temp_qr_pdf.png"
+            with open(temp_qr, "wb") as f:
+                f.write(qr_bytes)
+
+            c.drawImage(
+                temp_qr,
+                qr_x,
+                qr_y,
+                width=qr_size,
+                height=qr_size,
+                mask='auto'
+            )
+        except Exception as e:
+            print(f"QR Draw Error: {e}")
         
     c.setFont(FONT_NAME, 16)
     c.drawRightString(width - 2*cm, height - 2.5*cm, "电子行程单 / ITINERARY")
