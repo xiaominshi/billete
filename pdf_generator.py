@@ -17,7 +17,38 @@ from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.colors import HexColor
 from reportlab.platypus import Table, TableStyle, Image as PlatypusImage
+
+# --- Color & Style Definitions ---
+COLOR_PRIMARY = HexColor('#2c3e50')    # Deep Blue/Gray for Headers
+COLOR_TEXT_MAIN = HexColor('#34495e')  # Dark Gray for main text
+COLOR_TEXT_LIGHT = HexColor('#7f8c8d') # Light Gray for secondary info
+COLOR_BG_LIGHT = HexColor('#f8f9fa')   # Very light gray for backgrounds
+COLOR_BORDER = HexColor('#bdc3c7')     # Light border color
+
+def draw_plane_icon(c, x, y, size=10):
+    """Draws a simple vector plane icon centered at (x,y)"""
+    c.saveState()
+    c.translate(x, y)
+    s = size / 20.0 
+    c.scale(s, s)
+    # Simple plane path
+    path = c.beginPath()
+    path.moveTo(-10, 0)
+    path.lineTo(5, 0)     # Body
+    path.moveTo(-2, 0)
+    path.lineTo(-6, 8)    # Wing 1
+    path.lineTo(2, 0)
+    path.lineTo(-6, -8)   # Wing 2
+    path.lineTo(-2, 0)
+    path.moveTo(5, 0)
+    path.lineTo(8, 0)     # Nose
+    
+    c.setLineWidth(2)
+    c.setStrokeColor(COLOR_PRIMARY)
+    c.drawPath(path, stroke=1, fill=0)
+    c.restoreState()
 
 # Register a font that supports Chinese
 # Using a fallback strategy if specific font files are not found
@@ -75,7 +106,9 @@ def generate_pdf(data, qr_code_path=None):
     
     # --- Passengers ---
     c.setFont(FONT_NAME, 15)
+    c.setFillColor(COLOR_PRIMARY)
     c.drawString(2*cm, y, "旅客信息 / Passengers")
+    c.setFillColor(colors.black)
     y -= 0.8*cm
     
     pax_data = [["序号 / No.", "姓名 / Name", "票号 / Ticket Number"]]
@@ -87,19 +120,26 @@ def generate_pdf(data, qr_code_path=None):
     t_pax = Table(pax_data, colWidths=[2*cm, 8*cm, 7*cm])
     t_pax.setStyle(TableStyle([
         ('FONTNAME', (0,0), (-1,-1), FONT_NAME),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('TEXTCOLOR', (0,0), (-1,-1), COLOR_TEXT_MAIN),
+        ('GRID', (0,0), (-1,-1), 0.5, COLOR_BORDER),
+        ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARY),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTSIZE', (0,0), (-1,0), 11),  # Header Font Size
+        ('FONTSIZE', (0,1), (-1,-1), 10), # Content Font Size
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('PADDING', (0,0), (-1,-1), 6),
+        ('PADDING', (0,0), (-1,-1), 8),
+        ('ROWBACKGROUNDS', (1,0), (-1,-1), [colors.white, COLOR_BG_LIGHT]), # Zebra striping
     ]))
     t_pax.wrapOn(c, width, height)
-    t_pax.drawOn(c, 2*cm, y - (len(pax_data) * 0.8 * cm)) # Approx height calc
+    t_pax.drawOn(c, 2*cm, y - (len(pax_data) * 0.9 * cm)) # Approx height calc
     
-    y -= (len(pax_data) * 0.8 * cm) + 1.5*cm
+    y -= (len(pax_data) * 0.9 * cm) + 1.5*cm
     
     # --- Flights ---
     c.setFont(FONT_NAME, 15)
+    c.setFillColor(COLOR_PRIMARY)
     c.drawString(2*cm, y, "航班信息 / Flight Details")
+    c.setFillColor(colors.black)
     y -= 1*cm
     
     flights = data.get('flights', [])
@@ -109,37 +149,75 @@ def generate_pdf(data, qr_code_path=None):
             c.showPage()
             y = height - 3*cm
             c.setFont(FONT_NAME, 15)
+            c.setFillColor(COLOR_PRIMARY)
+            c.drawString(2*cm, y + 1*cm, "航班信息 / Flight Details") # Re-draw header if page break
+            c.setFillColor(colors.black)
         
-        # Flight Header Box
-        c.setFillColor(colors.aliceblue)
-        c.rect(2*cm, y-3*cm, width-4*cm, 3*cm, fill=1, stroke=0)
-        c.setFillColor(colors.black)
+        # Flight Card Background (Rounded)
+        card_height = 3.5*cm
+        center_y = y - (card_height / 2) # Vertical center of the card
         
-        # Date & Flight No
-        c.setFont(FONT_NAME, 11)
-        date_str = f"{f.get('year')}年{f.get('month')}月{f.get('day')}日"
-        c.drawString(2.5*cm, y-1*cm, date_str)
-        c.drawRightString(width-2.5*cm, y-1*cm, f.get('id', 'Flight'))
+        c.setStrokeColor(COLOR_BORDER)
+        c.setFillColor(colors.white)
+        c.roundRect(2*cm, y-card_height, width-4*cm, card_height, 8, fill=1, stroke=1)
         
-        # Route
-        c.setFont(FONT_NAME, 13)
-        c.drawString(2.5*cm, y-2*cm, f"{f.get('start')} {f.get('origin')}")
+        # --- Left Column: Date & Airline ---
+        c.setFillColor(COLOR_TEXT_MAIN)
         
-        # Arrow / Duration
+        # Flight No (Large)
+        c.setFont(FONT_NAME, 14) 
+        c.drawString(3*cm, center_y + 0.4*cm, f.get('id', 'Flight'))
+        
+        # Date (Smaller, gray)
+        c.setFillColor(COLOR_TEXT_LIGHT)
+        c.setFont(FONT_NAME, 10)
+        date_str = f"{f.get('year')}-{f.get('month')}-{f.get('day')}"
+        c.drawString(3*cm, center_y - 0.5*cm, date_str)
+        
+        # --- Center Column: Route & Times ---
+        c.setFillColor(COLOR_TEXT_MAIN)
+        
+        # Calculate visual centers for Origin and Dest relative to card center
+        # Plane is at width/2
+        # Origin block center: width/2 - 4cm
+        # Dest block center: width/2 + 4cm
+        
+        origin_center_x = width/2 - 3.5*cm
+        dest_center_x = width/2 + 3.5*cm
+        
+        # Origin Time & City
+        c.setFont(FONT_NAME, 16) # Big Time
+        c.drawCentredString(origin_center_x, center_y + 0.3*cm, f.get('start'))
+        
+        c.setFont(FONT_NAME, 11) # Small City
+        c.setFillColor(COLOR_TEXT_LIGHT)
+        c.drawCentredString(origin_center_x, center_y - 0.5*cm, f.get('origin'))
+        
+        # Plane Icon in Center
+        draw_plane_icon(c, width/2, center_y + 0.3*cm, size=20)
+        
+        # Duration Text below plane
         c.setFont(FONT_NAME, 9)
-        # Use simple ASCII arrow instead of unicode plane to ensure compatibility
-        c.drawCentredString(width/2, y-1.8*cm, "-----------------------------------")
-        c.drawCentredString(width/2, y-2.2*cm, f.get('duration', ''))
+        c.setFillColor(COLOR_TEXT_LIGHT)
+        c.drawCentredString(width/2, center_y - 0.6*cm, f.get('duration', ''))
+
+        # Dest Time & City
+        c.setFillColor(COLOR_TEXT_MAIN)
+        c.setFont(FONT_NAME, 16) # Big Time
+        c.drawCentredString(dest_center_x, center_y + 0.3*cm, f.get('end'))
         
-        c.setFont(FONT_NAME, 13)
-        c.drawRightString(width-2.5*cm, y-2*cm, f"{f.get('dest')} {f.get('end')}")
-        
-        # Arrival Date hint
+        # +1 Indicator
         if f.get('next_day'):
-            c.setFont(FONT_NAME, 10)
-            c.drawRightString(width-2.5*cm, y-2.5*cm, "(+1天到达)")
-            
-        y -= 3.5*cm # Move down for next flight
+             c.setFont(FONT_NAME, 9)
+             c.setFillColor(colors.red)
+             # Place nicely next to time or above
+             c.drawString(dest_center_x + 1.5*cm, center_y + 0.6*cm, "+1")
+
+        c.setFont(FONT_NAME, 11) # Small City
+        c.setFillColor(COLOR_TEXT_LIGHT)
+        c.drawCentredString(dest_center_x, center_y - 0.5*cm, f.get('dest'))
+        
+        y -= (card_height + 0.5*cm) # Move down for next flight
         
     # --- Luggage ---
     if y < 4*cm:
@@ -149,17 +227,30 @@ def generate_pdf(data, qr_code_path=None):
     lug = data.get('luggage', {})
     if lug:
         c.setFont(FONT_NAME, 15)
+        c.setFillColor(COLOR_PRIMARY)
         c.drawString(2*cm, y, "行李额度 / Baggage Allowance")
+        c.setFillColor(colors.black)
         y -= 0.8*cm
         
+        # Luggage Box
+        c.setStrokeColor(COLOR_BORDER)
+        c.setFillColor(COLOR_BG_LIGHT)
+        c.roundRect(2*cm, y-1.5*cm, width-4*cm, 1.5*cm, 4, fill=1, stroke=1)
+        
         lug_text = f"托运行李: {lug.get('pack_count', 0)}件 x {lug.get('pack_weight', 0)}kg   |   手提行李: {lug.get('hand_count', 0)}件 x {lug.get('hand_weight', 0)}kg"
-        c.setFont(FONT_NAME, 10)
-        c.drawString(2.5*cm, y, lug_text)
-        y -= 1.5*cm
+        c.setFillColor(COLOR_TEXT_MAIN)
+        c.setFont(FONT_NAME, 11)
+        c.drawString(2.5*cm, y-1*cm, lug_text)
+        y -= 2*cm
 
     # --- Footer / QR Code ---
     # Draw at bottom of current page
-    footer_y = 2*cm
+    footer_y = 1.5*cm
+    
+    # Divider
+    c.setStrokeColor(COLOR_BORDER)
+    c.setLineWidth(0.5)
+    c.line(2*cm, footer_y + 2.5*cm, width-2*cm, footer_y + 2.5*cm)
     
     if qr_code_path and qr_code_path.startswith('data:image'):
         try:
@@ -177,15 +268,20 @@ def generate_pdf(data, qr_code_path=None):
                 f.write(qr_bytes)
 
                 
-            c.drawImage(temp_qr, 2*cm, footer_y, width=3*cm, height=3*cm)
+            c.drawImage(temp_qr, 2*cm, footer_y, width=2.5*cm, height=2.5*cm)
             
             # Clean up later or rely on OS
         except Exception as e:
             print(f"QR Draw Error: {e}")
     
     c.setFont(FONT_NAME, 10)
-    c.drawRightString(width-2*cm, footer_y + 1*cm, "祝您旅途愉快! / Have a nice trip!")
-    c.drawRightString(width-2*cm, footer_y + 0.5*cm, "Generated by Billete System")
+    c.setFillColor(COLOR_PRIMARY)
+    c.drawRightString(width-2*cm, footer_y + 1.5*cm, "祝您旅途愉快! / Have a nice trip!")
+    
+    c.setFont(FONT_NAME, 8)
+    c.setFillColor(COLOR_TEXT_LIGHT)
+    c.drawRightString(width-2*cm, footer_y + 1*cm, "如有疑问请联系客服 / Contact support for questions")
+    c.drawRightString(width-2*cm, footer_y + 0.6*cm, "Generated by Billete System")
     
     c.save()
     buffer.seek(0)
