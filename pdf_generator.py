@@ -51,18 +51,10 @@ def draw_plane_icon(c, x, y, size=10):
     c.restoreState()
 
 # Register a font that supports Chinese
-# Using a fallback strategy if specific font files are not found
+# Using bundled font in fonts/ directory
 try:
-    # Try to load a font commonly available or included in the project
-    # Ideally, we should ship a font like 'NotoSansSC-Regular.ttf' in a fonts/ folder
-    # For now, we'll assume a standard Windows font or a bundled one
-    # If on Render (Linux), we might need to download/bundle one.
-    
-    # Check for bundled font
+    # Always look for bundled font first
     FONT_PATH = os.path.join(os.path.dirname(__file__), "fonts", "SimHei.ttf")
-    if not os.path.exists(FONT_PATH):
-        # Fallback to Windows system font for local dev
-        FONT_PATH = "C:\\Windows\\Fonts\\simhei.ttf"
     
     if os.path.exists(FONT_PATH):
         pdfmetrics.registerFont(TTFont('SimHei', FONT_PATH))
