@@ -317,70 +317,64 @@
 
         // --- PDF Logic ---
         function downloadPDF() {
-            const { jsPDF } = window.jspdf;
-            const element = document.getElementById('visualCard');
-            
-            if (!element.innerText.trim()) {
+            if (!lastProcessedData) {
                 showToast("Please process flight code first!", true);
                 return;
             }
             
             const btn = document.getElementById('pdfBtn');
             const originalText = btn.innerHTML;
-            btn.innerHTML = '⏳ Saving...';
+            btn.innerHTML = '⏳ Generating...';
+            
+            // Add terms to data payload
+            const termsContent = document.getElementById('terms').value;
+            // Ensure lastProcessedData exists and is valid
+            if (!lastProcessedData || typeof lastProcessedData !== 'object') {
+                 showToast("Invalid flight data", true);
+                 btn.innerHTML = originalText;
+                 return;
+            }
+            
+            const payload = {
+                ...lastProcessedData,
+                terms: termsContent
+            };
 
-            html2canvas(element, {
-                scale: 2, // High quality
-                useCORS: true
-            }).then(canvas => {
-                const imgData = canvas.toDataURL('image/png');
-                
-                // A4 dimensions in mm: 210 x 297
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pageWidth = pdf.internal.pageSize.getWidth();
-                const pageHeight = pdf.internal.pageSize.getHeight();
-                const margin = 10;
-                
-                // Calculate dimensions
-                const imgProps = pdf.getImageProperties(imgData);
-                const pdfWidth = pageWidth - (margin * 2);
-                let pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                
-                // Auto-scale to fit single page if it slightly exceeds (e.g., up to 1.3x page height)
-                // Otherwise, it would cut off or require multi-page logic (which is complex for images)
-                // Since this is an itinerary, fitting on one page is usually preferred.
-                const maxPageHeight = pageHeight - (margin * 2);
-                
-                if (pdfHeight > maxPageHeight) {
-                    // Calculate scale factor to fit height
-                    const scaleFactor = maxPageHeight / pdfHeight;
-                    // Only scale if it's not TOO long (avoid making text unreadable)
-                    // If it's huge (e.g. 2 pages worth), we might just let it crop or implement multi-page later.
-                    // But for 4 flights, it's likely just a bit over.
-                    
-                    const scaledWidth = pdfWidth * scaleFactor;
-                    const scaledHeight = maxPageHeight;
-                    
-                    // Center horizontally
-                    const x = (pageWidth - scaledWidth) / 2;
-                    pdf.addImage(imgData, 'PNG', x, margin, scaledWidth, scaledHeight);
-                } else {
-                    // Fits normally
-                    pdf.addImage(imgData, 'PNG', margin, margin, pdfWidth, pdfHeight);
+            fetch('/download_pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                // Check content type
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.includes("text/html")) {
+                     throw new Error("Session expired. Please refresh and login again.");
                 }
-
-                pdf.save("Flight_Itinerary.pdf");
-                
+                if (!response.ok) throw new Error("Generation Failed: " + response.statusText);
+                return response.blob();
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "Itinerary.pdf";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
                 showToast("PDF Downloaded!");
-                btn.innerHTML = originalText;
-            }).catch(err => {
+            })
+            .catch(err => {
                 console.error(err);
                 showToast("PDF Generation Failed", true);
+            })
+            .finally(() => {
                 btn.innerHTML = originalText;
             });
         }
 
-        // Image Generation Logic
+        // --- i18n Logic ---
         async function copyImage(blob) {
             try {
                 await navigator.clipboard.write([

@@ -1,7 +1,7 @@
 # Document Processing
 python-docx==0.8.11
 pypdf>=3.0.0
-reportlab>=3.6.12
+reportlab==3.5.55
 
 # Web Service
 flask>=2.0.0

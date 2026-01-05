@@ -437,7 +437,7 @@ class Logic:
                         dur_min = int(dur.total_seconds() / 60)
                         dur_h = dur_min // 60
                         dur_m = dur_min % 60
-                        duration_fmt = f"{dur_h}小时 {dur_m}m"
+                        duration_fmt = f"{dur_h}小时 {dur_m}分"
                         
                         arr_month = dt_end_local.month
                         arr_day = dt_end_local.day

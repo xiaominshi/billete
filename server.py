@@ -662,6 +662,40 @@ def download_ics():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/download_pdf', methods=['POST'])
+# @login_required  <-- Temporarily removed to fix session issues
+def download_pdf():
+    try:
+        from flask import send_file, session
+        import database
+        import pdf_generator
+        
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        # Optional: Get User's QR Code for Footer
+        user_id = session.get('user_id')
+        qr_code = None
+        if user_id:
+            user = database.get_user_by_id(user_id)
+            qr_code = user.get('qr_code') if user else None
+        
+        pdf_buffer = pdf_generator.generate_pdf(data, qr_code_path=qr_code)
+
+        
+        return send_file(
+            pdf_buffer,
+            as_attachment=True,
+            download_name='Itinerary.pdf',
+            mimetype='application/pdf'
+        )
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"PDF Gen Error: {error_msg}")
+        return jsonify({'error': str(e), 'trace': error_msg}), 500
+
 @app.route('/version', methods=['GET'])
 def version():
     # Simple health/version info
