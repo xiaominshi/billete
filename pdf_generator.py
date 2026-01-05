@@ -270,27 +270,7 @@ def generate_pdf(data, qr_code_path=None):
     c.setLineWidth(0.5)
     c.line(2*cm, footer_y + 2.5*cm, width-2*cm, footer_y + 2.5*cm)
     
-    if qr_code_path and qr_code_path.startswith('data:image'):
-        try:
-            # Handle Data URI
-            import base64
-            from PIL import Image as PILImage
-            
-            header, encoded = qr_code_path.split(",", 1)
-            # data is already a local variable in this scope (from function argument), rename to qr_bytes
-            qr_bytes = base64.b64decode(encoded)
-            
-            # Save temp file
-            temp_qr = "temp_qr_pdf.png"
-            with open(temp_qr, "wb") as f:
-                f.write(qr_bytes)
-
-                
-            c.drawImage(temp_qr, 2*cm, footer_y, width=2.5*cm, height=2.5*cm)
-            
-            # Clean up later or rely on OS
-        except Exception as e:
-            print(f"QR Draw Error: {e}")
+   
     
     c.setFont(FONT_NAME, 10)
     c.setFillColor(COLOR_PRIMARY)
