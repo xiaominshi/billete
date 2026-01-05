@@ -366,15 +366,18 @@ class Logic:
                 ori_name = self.resolve_airport(ori)
                 des_name = self.resolve_airport(des)
                 
-                time_idx = -1
+                # Robust time extraction: find ALL valid time strings and take the LAST TWO
+                times_found = []
                 for i in range(ori_des_idx + 1, len(line_parts)):
-                    if re.match(r'^\d{4}$', line_parts[i]) or re.match(r'^\d{4}\+\d$', line_parts[i]):
-                        time_idx = i
-                        break
+                    part = line_parts[i]
+                    # Match HHMM or HHMM+1
+                    if re.match(r'^\d{4}$', part) or re.match(r'^\d{4}\+\d$', part):
+                        times_found.append(part)
                 
-                if time_idx != -1:
-                    start_time = line_parts[time_idx]
-                    end_time = line_parts[time_idx+1]
+                if len(times_found) >= 2:
+                    # Take the last two found times (ignoring any earlier "check-in" or "status" times)
+                    start_time = times_found[-2]
+                    end_time = times_found[-1]
                     
                     next_day = False
                     if "+" in end_time:
