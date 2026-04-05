@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Billete 翻译助手</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header>
+      <div class="logo">✈ Billete</div>
+    </header>
+
+    <!-- Input Area -->
+    <div class="section">
+      <div class="section-header">
+        <span>PNR 内容</span>
+        <button id="getFromPageBtn" class="btn-sm">从页面获取</button>
+      </div>
+      <textarea id="pnrInput" placeholder="从Amadeus页面自动读取，或手动粘贴PNR代码... (Ctrl+Enter 翻译)"></textarea>
+      <div class="luggage-row">
+        <label>手提 <input id="handCount" type="number" value="1" min="0" max="9" style="width:42px">件
+          <input id="handWeight" type="number" value="8" min="0" max="99" style="width:42px">kg
+        </label>
+        <label>托运 <input id="packCount" type="number" value="2" min="0" max="9" style="width:42px">件
+          <input id="packWeight" type="number" value="23" min="0" max="99" style="width:42px">kg
+        </label>
+      </div>
+      <button id="translateBtn" class="btn-primary full-width">翻译 ✈</button>
+    </div>
+
+    <!-- Result Area -->
+    <div class="section" id="resultSection" style="display:none">
+      <div class="section-header">
+        <span>翻译结果</span>
+        <button id="copyBtn" class="btn-sm">复制</button>
+      </div>
+      <div id="resultBox" class="result-box"></div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorBox" class="error-box hidden"></div>
+  </div>
+
+  <script src="logic.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

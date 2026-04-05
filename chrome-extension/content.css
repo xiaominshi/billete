@@ -1,0 +1,4 @@
+/* Injected styles for the floating button - scoped to avoid conflicts */
+#billete-translate-btn {
+  font-family: system-ui, -apple-system, sans-serif !important;
+}
