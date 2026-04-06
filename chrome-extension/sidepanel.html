@@ -27,6 +27,15 @@
           <input id="packWeight" type="number" value="23" min="0" max="99" style="width:42px">kg
         </label>
       </div>
+      <div class="terms-section">
+        <div class="section-header">
+          <span>机票条款</span>
+        </div>
+        <textarea id="termInput">机票条款：
+可退 全程未飞前 需扣除退票费400欧 其余款可退
+可改 改签费200欧+舱位差价（需现查报价为准）
+有效期6个月。</textarea>
+      </div>
       <button id="translateBtn" class="btn-primary full-width">翻译 ✈</button>
     </div>
 
@@ -34,13 +43,72 @@
     <div class="section" id="resultSection" style="display:none">
       <div class="section-header">
         <span>翻译结果</span>
-        <button id="copyBtn" class="btn-sm">复制</button>
+        <div style="display:flex;gap:6px">
+          <button id="imgBtn" class="btn-sm">生成图片</button>
+          <button id="copyBtn" class="btn-sm">复制</button>
+        </div>
       </div>
       <div id="resultBox" class="result-box"></div>
     </div>
 
+    <!-- Ticket Tracker -->
+    <div class="section" id="ticketSection">
+      <div class="section-header" style="cursor:pointer" id="ticketToggle">
+        <span>出票记录 <span id="ticketBadge" class="ticket-badge" style="display:none"></span></span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button id="clearTicketsBtn" class="btn-sm" style="display:none">清空</button>
+          <span id="ticketArrow" style="font-size:10px;color:#9aa0a6">▼</span>
+        </div>
+      </div>
+      <div id="ticketPanel" style="display:none">
+        <div class="ticket-tabs">
+          <button class="ticket-tab active" data-filter="pending">未起飞</button>
+          <button class="ticket-tab" data-filter="all">全部</button>
+        </div>
+        <div id="ticketSummary" class="ticket-summary" style="display:none"></div>
+        <div id="ticketList"></div>
+      </div>
+    </div>
+
+    <!-- History Area -->
+    <div class="section" id="historySection">
+      <div class="section-header" style="cursor:pointer" id="historyToggle">
+        <span>历史记录</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button id="clearHistoryBtn" class="btn-sm" style="display:none">清空</button>
+          <span id="historyArrow" style="font-size:10px;color:#9aa0a6">▼</span>
+        </div>
+      </div>
+      <div id="historyList" style="display:none"></div>
+    </div>
+
+    <!-- Airport Code Management -->
+    <div class="section" id="airportSection">
+      <div class="section-header" style="cursor:pointer" id="airportToggle">
+        <span>机场代码</span>
+        <span id="airportArrow" style="font-size:10px;color:#9aa0a6">▼</span>
+      </div>
+      <div id="airportPanel" style="display:none">
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <input id="airportSearch" type="text" placeholder="搜索代码或名称..." style="flex:1;border:1px solid #dadce0;border-radius:4px;padding:5px 8px;font-size:12px;outline:none">
+        </div>
+        <div id="airportList" class="airport-list"></div>
+        <div style="margin-top:10px;border-top:1px solid #e0e0e0;padding-top:10px">
+          <div style="font-size:11px;font-weight:600;color:#5f6368;margin-bottom:6px">添加/修改</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input id="airportCode" type="text" placeholder="代码(如FOC)" maxlength="3" style="width:72px;border:1px solid #dadce0;border-radius:4px;padding:5px 8px;font-size:12px;outline:none;text-transform:uppercase">
+            <input id="airportName" type="text" placeholder="中文名(如福州长乐)" style="flex:1;border:1px solid #dadce0;border-radius:4px;padding:5px 8px;font-size:12px;outline:none">
+            <button id="saveAirportBtn" class="btn-sm" style="white-space:nowrap">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Error -->
     <div id="errorBox" class="error-box hidden"></div>
+
+    <!-- Bottom padding -->
+    <div style="height:16px"></div>
   </div>
 
   <script src="logic.js"></script>

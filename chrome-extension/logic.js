@@ -546,7 +546,7 @@ class BilleteLogic {
     const handWeight = opts.handWeight ?? 8;
     const packCount  = opts.packCount  ?? 2;
     const packWeight = opts.packWeight ?? 23;
-
+	const terms = opts.terms ?? '';
     let res = '';
 
     for (let i = 0; i < this.passengers.length; i++) {
@@ -568,25 +568,28 @@ class BilleteLogic {
         res += `【${f.year}年${f.month}月${f.day}日】\n`;
       }
 
-      const layover = this.layovers.find(l => l.flightIndex === i);
-      if (layover && layover.type === 'layover' && layover.hours >= 0) {
-        res += `${layover.place}停留: ${layover.hours}小时${layover.minutes}分\n`;
-      }
+      
 
       if (f.start === '--:--') {
         res += `${f.origin} → ${f.dest}\n`;
       } else {
         res += `${f.origin}-${f.dest}-->${f.start}-${f.end}`;
         if (f.nextDay) res += '+1';
-        if (f.duration && f.duration !== '--') res += `  (飞行${f.duration})`;
         res += '\n';
+      }
+      const layover = this.layovers.find(l => l.flightIndex === i + 1);
+      if (layover && layover.type === 'layover' && layover.hours >= 0) {
+        res += `${layover.place}停留: ${layover.hours}小时${layover.minutes}分\n`;
       }
     }
 
     if (packCount > 0 || handCount > 0) {
       res += `\n行李: 手提${handCount}件${handWeight}kg / 托运${packCount}件${packWeight}kg`;
     }
-
+	
+	if (terms) {
+	  res += `\n\n${terms}`;
+	}
     return res.trim();
   }
 }
